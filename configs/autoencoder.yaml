@@ -1,0 +1,45 @@
+datasets:
+  use_data: ['model', ] # ('model', 'time_vel', 'migrate', 'well_log', 'horizens', 'rms_vel')
+  dataset_name: ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
+  depth_velocity:
+    shape: [ 1, 70, 70 ]
+
+autoencoder_conf:
+  reshape: [16, 64, 64 ]
+  down_block_types: [ "DownEncoderBlock2D", "DownEncoderBlock2D", "DownEncoderBlock2D" ]
+  up_block_types: [ "UpDecoderBlock2D", "UpDecoderBlock2D", "UpDecoderBlock2D" ]
+  block_out_channels: [ 64, 128, 256 ]
+  latent_channels: 16
+
+training:
+  lr: 1e-4
+  kl_weight: 0
+  perceptual_weight: 0
+  ssim_weight: 0
+  use_ema: True
+
+  max_epochs: 150
+  min_epochs: 50
+  device: [ 0, ]
+  precision: 'bf16-mixed'
+
+  dataloader:
+    batch_size: 700
+    num_workers: 2
+    prefetch_factor: 8
+
+  logging:
+    log_dir: 'logs/autoencoder/my_cond_autoencoder/'
+    log_version: 'ALL_nocond'
+
+  callbacks:
+    early_stopping:
+      monitor: 'val/loss'
+      mode: 'min'
+      patience: 10
+
+    checkpoint:
+      filename: 'epoch_{epoch}-loss{val/loss:.4f}'
+      save_top_k: 3
+      monitor: 'val/loss'
+      mode: 'min'

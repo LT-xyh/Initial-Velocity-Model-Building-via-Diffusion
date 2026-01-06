@@ -1,0 +1,54 @@
+datasets:
+  use_data: [ 'model', 'migrate', 'well_log', 'horizens', 'rms_vel' ] # ('model', 'time_vel', 'migrate', 'well_log', 'horizens', 'rms_vel')
+  dataset_name: ['CurveVelA', ]  #['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
+  depth_velocity:
+    shape: [ 1, 70, 70 ]
+
+autoencoder_conf:
+  reshape: [ 16, 64, 64 ]
+  down_block_types: [ "DownEncoderBlock2D", "DownEncoderBlock2D", "DownEncoderBlock2D" ] #["AttnDownEncoderBlock2D", "AttnDownEncoderBlock2D", "AttnDownEncoderBlock2D"]
+  up_block_types: [ "UpDecoderBlock2D", "UpDecoderBlock2D", "UpDecoderBlock2D" ] #["AttnUpDecoderBlock2D", "AttnUpDecoderBlock2D", "AttnUpDecoderBlock2D"]
+  down_block_out_channels: [ 32, 64, 128 ]
+  up_block_out_channels: [ 128, 128, 256 ]
+  latent_channels: 16
+
+latent_cond_encoder:
+  in_channels: 1
+  mid_channels: 16
+  out_channels: 64
+  down_block_types: [ "DownEncoderBlock2D", "DownEncoderBlock2D", "DownEncoderBlock2D", "DownEncoderBlock2D", "DownEncoderBlock2D" ]
+  block_out_channels: [ 64, 128, 128, 256, 256 ]
+
+training:
+  lr: 1e-4
+  kl_weight: 1e-6
+  perceptual_weight: 0
+  ssim_weight: 0
+  max_latent_recon_weight: 0.5
+  use_ema: True
+
+  max_epochs: 150
+  min_epochs: 50
+  device: [ 0, ]
+  precision: 'bf16-mixed'
+
+  dataloader:
+    batch_size: 50
+    num_workers: 2
+    prefetch_factor: 8
+
+  logging:
+    log_dir: 'logs/autoencoder/unet_cond_autoencoder/'
+    log_version: 'CurveVelA_cond_ema_1-1_reconZ_0912'
+
+  callbacks:
+    early_stopping:
+      monitor: 'val/loss'
+      mode: 'min'
+      patience: 10
+
+    checkpoint:
+      filename: 'epoch_{epoch}-ssim{val/ssim:.3f}'
+      save_top_k: 3
+      monitor: 'val/ssim'
+      mode: 'max'

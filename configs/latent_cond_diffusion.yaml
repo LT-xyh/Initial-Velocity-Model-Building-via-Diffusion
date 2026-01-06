@@ -1,0 +1,49 @@
+datasets:
+  use_data: [ 'model', 'migrate', 'well_log', 'horizens', 'rms_vel' ] # ('model', 'time_vel', 'migrate', 'well_log', 'horizens', 'rms_vel')
+  dataset_name: ['CurveVelA', ]  #['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
+  depth_velocity:
+    shape: [ 1, 70, 70 ]
+
+autoencoder_conf:
+#  autoencoder_checkpoint_path: 'logs/autoencoder/my_cond_autoencoder/tensorboard/CurveVelA_cond_ema_0905/checkpoints/epoch_47-loss0.877.ckpt'
+  autoencoder_checkpoint_path: 'logs\autoencoder\unet_cond_autoencoder\tensorboard\CurveVelA_cond_ema_1-1_reconZ_0912\checkpoints\epoch_32-ssim0.945.ckpt'
+
+latent_diffusion:
+  schedule:
+    timesteps: 1000
+    beta_schedule: 'linear'
+  cond:
+    model_mode : 'crossattn'
+
+training:
+  lr: 5e-5
+  kl_weight: 1e-6
+  perceptual_weight: 0
+  ssim_weight: 0
+  use_ema: True
+
+  max_epochs: 150
+  min_epochs: 50
+  device: [ 0, ]
+  precision: 'bf16-mixed'
+
+  dataloader:
+    batch_size: 20
+    num_workers: 2
+    prefetch_factor: 6
+
+  logging:
+    log_dir: 'logs/diffusion/'
+    log_version: 'CurveVelA_ldm_train-cond_embedding_ema_0918'
+
+  callbacks:
+    early_stopping:
+      monitor: 'val/mse'
+      mode: 'min'
+      patience: 10
+
+    checkpoint:
+      filename: 'epoch_{epoch}-loss{val/ssim:.3f}'
+      save_top_k: 3
+      monitor: 'val/ssim'
+      mode: 'max'
