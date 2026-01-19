@@ -10,7 +10,6 @@ class DixLightning(BaseLightningModule):
         self.dix = SmoothDix()
         self.vmax = 4500.0
         self.vmin = 1500.0
-        # self.dix = SmoothDix(dt, dz, nz, vmin, vmax)
         self.test_image_save_dir = test_image_save_dir
 
     def test_step(self, batch, batch_idx):

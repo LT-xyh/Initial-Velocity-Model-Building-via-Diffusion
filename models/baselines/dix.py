@@ -78,7 +78,7 @@ class SmoothDix(nn.Module):
         nz: int = 70,
         vmin: float = 1200.0,
         vmax: float = 6000.0,
-        smooth_lambda: float = 5.0,
+        smooth_lambda: float = 10.0,
         eps: float = 1e-6,
     ):
         super().__init__()

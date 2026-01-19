@@ -21,6 +21,9 @@ def base_train(model, conf, fast_run=True, use_lr_finder=False, ckpt_path=None):
         test_idx = list(range(total_size - test_size, total_size))
         remaining_idx = list(range(total_size - test_size))  # 剩下的80%用于训练和验证
 
+        # test_idx = list(range(test_size))
+        # remaining_idx = list(range(test_size, total_size))  # 剩下的80%用于训练和验证
+
         # 从剩余数据中随机划分训练集和验证集
         train_idx, val_idx = train_test_split(remaining_idx, test_size=0.25,  # 相对于剩余数据的25%，即总数据的20%
                                               random_state=42, shuffle=True  # 训练集和验证集随机划分

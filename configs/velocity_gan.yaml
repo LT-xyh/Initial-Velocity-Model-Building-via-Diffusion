@@ -1,14 +1,15 @@
 datasets: # 建议：VelocityGAN 实验先别把 time_vel 放进 use_data（你当前 G 也没用它），减少IO和显存/内存压力
   # 如果你确实要用 time_vel，那就需要改 G 的输入通道和 forward（属于“偏离论文结构”的改动）
   use_data: [ 'depth_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel' ]
-  dataset_name: [ 'CurveVelA', ] #[ 'FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB' ]
+  dataset_name: [ 'FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB' ]
   use_normalize: '-1_1'
   depth_velocity:
     shape: [ 1, 70, 70 ]
 velocity_gan:
   adv_w: 0.01          # 对抗项权重，先小一点更稳（0.1~1.0）
-  warmup_epochs: 5   # 前10个epoch只训G的重建项
-  in_ch: 4
+  warmup_epochs: 5   # 前个epoch只训G的重建项
+  in_ch: 2
+  cond_ch: 2
   base_channel: 64
   d_base_channel: 16
 
@@ -44,7 +45,7 @@ training: # 关键：WGAN-GP 更常用 1e-4 级别（1e-3 往往偏大，D 会�
   precision: '32-true' #'bf16-mixed'
 
   dataloader:
-    batch_size: 100     # 你原来 300 很激进，先降下来把训练稳定性搞定
+    batch_size: 100
     num_workers: 2
     prefetch_factor: 3
 

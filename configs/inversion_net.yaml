@@ -22,7 +22,7 @@ training:
   precision: 'bf16-mixed'
 
   dataloader:
-    batch_size: 50
+    batch_size: 200
     num_workers: 2
     prefetch_factor: 3
 
@@ -44,4 +44,4 @@ training:
 
 testing:
   test_save_dir: 'logs/baselines/inversion_net'
-  ckpt_path: 'logs/baselines/inversion_net/tensorboard/1231_/checkpoints/epoch_44-ssim0.659.ckpt'
+  ckpt_path: ''

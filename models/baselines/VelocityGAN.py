@@ -101,7 +101,7 @@ class VelocityGAN_Generator_MC(nn.Module):
       - depth_vel_pred: (B,1,70,70) in [-1,1]
     """
 
-    def __init__(self, in_ch: int = 2, cond_ch: int = 3, base: int = 32, target_hw=(70, 70)):
+    def __init__(self, in_ch: int = 2, cond_ch: int = 2, base: int = 32, target_hw=(70, 70)):
         super().__init__()
         self.target_hw = target_hw
 
@@ -153,7 +153,7 @@ class VelocityGAN_Generator_MC(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, migrated_image: torch.Tensor, rms_vel: torch.Tensor,
-                horizon: torch.Tensor, well_log: torch.Tensor, well_mask: torch.Tensor) -> torch.Tensor:
+                horizon: torch.Tensor, well_log: torch.Tensor) -> torch.Tensor:
         # -----------------------------------------------
         # Step 1: Encoder (Time Domain Processing)
         # -----------------------------------------------
@@ -190,8 +190,8 @@ class VelocityGAN_Generator_MC(nn.Module):
         # We inject constraints here to keep high spatial resolution
         # Concatenate: [Feature(64x64), Well(64x64), Mask(64x64), Horizon(64x64)]
 
-        # Prepare conditions: (B, 3, 70, 70)
-        conds = torch.cat([well_log, well_mask, horizon], dim=1)
+        # Prepare conditions: (B, 2, 70, 70)
+        conds = torch.cat([well_log, horizon], dim=1)
 
         # Crop conditions to match decoder feature size (64x64)
         conds_cropped = center_crop(conds, (64, 64))
@@ -319,22 +319,20 @@ def smoke_test_velocitygan_mc(device=None):
     for xc in well_cols:
         # Fill data
         well_log[:, :, :, xc] = torch.randn(B, 1, Z, device=device).clamp(-1, 1)
-        # Fill mask (1.0 indicates data exists)
-        well_mask[:, :, :, xc] = 1.0
 
     # Ground Truth
     depth_vel_gt = torch.randn(B, 1, Z, X, device=device).clamp(-1, 1)
 
     # 3) Build Models
     # in_ch=2 (Mig, RMS), cond_ch=3 (Well, Mask, Horizon)
-    G = VelocityGAN_Generator_MC(in_ch=2, cond_ch=3, base=32, target_hw=(70, 70)).to(device).train()
+    G = VelocityGAN_Generator_MC(in_ch=2, cond_ch=2, base=32, target_hw=(70, 70)).to(device).train()
     D = VelocityGAN_Discriminator_Patch4(in_ch=1, base=32).to(device).train()
 
     optG = torch.optim.Adam(G.parameters(), lr=2e-4, betas=(0.5, 0.999))
     optD = torch.optim.Adam(D.parameters(), lr=2e-4, betas=(0.5, 0.999))
 
     # 4) Forward Pass
-    fake = G(migrated_image, rms_vel, horizon, well_log, well_mask)
+    fake = G(migrated_image, rms_vel, horizon, well_log)
 
     # 5) Update D
     lossD = wgan_gp_discriminator_loss(D, real=depth_vel_gt, fake=fake, gp_lambda=10.0)
@@ -343,7 +341,7 @@ def smoke_test_velocitygan_mc(device=None):
     optD.step()
 
     # 6) Update G
-    fake = G(migrated_image, rms_vel, horizon, well_log, well_mask)  # Regenerate
+    fake = G(migrated_image, rms_vel, horizon, well_log)  # Regenerate
     lossG = generator_loss(D, fake=fake, real=depth_vel_gt, l1_w=50.0, l2_w=100.0)
     optG.zero_grad()
     lossG.backward()

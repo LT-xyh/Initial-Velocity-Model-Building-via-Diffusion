@@ -105,7 +105,7 @@ def save_multiple_curves(curves, labels=None, filename='', title="Well log", x_l
     ax.set_ylabel(y_label)
     ax.legend()
     # ax.grid(True, alpha=0.3)
-    # plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     # 保存图像
     if save:
         plt.savefig(filename)

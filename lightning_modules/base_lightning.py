@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 import torchvision
 
+from diffusers import EMAModel
 from utils.metrics import ValMetrics
 
 
@@ -18,7 +19,7 @@ class BaseLightningModule(lightning.LightningModule):
         on_validation_epoch_end：在验证epoch后计算指标并可视化
     """
 
-    def __init__(self, batch_size, lr=2e-5, data_range=1.0):
+    def __init__(self, batch_size, lr=2e-5, data_range=2.0,):
         super().__init__()
         self.save_hyperparameters()  # 保存超参
         self.batch_size = batch_size
@@ -30,10 +31,15 @@ class BaseLightningModule(lightning.LightningModule):
         self._last_train_batch = None
         # 保存最后一个验证批次的数据，用于可视化
         self._last_val_batch = None
+        self.ema = None
+
+
 
     def setup(self, stage):
+        if self.ema is not None:
+            self.ema.to(self.device)
         # 指标计算类
-        # self.train_metrics = ValMetrics(data_range=self.data_range, device=self.device)
+        self.train_metrics = ValMetrics(data_range=self.data_range, device=self.device)
         self.val_metrics = ValMetrics(data_range=self.data_range, device=self.device)
         self.test_metrics = ValMetrics(data_range=self.data_range, device=self.device)
 
@@ -46,25 +52,34 @@ class BaseLightningModule(lightning.LightningModule):
     def test_step(self, batch, batch_idx):
         return
 
-    # def on_train_epoch_end(self):
-    #     """
-    #     每个训练 epoch 结束时调用的方法。
-    #     用于计算验证集的指标，记录指标并重置指标计算类。
-    #     同时记录可视化图像。
-    #     """
-    #     results = self.train_metrics.compute()
-    #     for k, v in results.items():
-    #         # 记录训练集的指标，每个 epoch 记录一次，并显示在进度条上
-    #         self.log(f'train/{k}', v, prog_bar=False, on_step=False, on_epoch=True)
-    #     # 重置训练集的指标计算类
-    #     self.train_metrics.reset()
-
-    def on_validation_epoch_end(self):
+    def on_train_epoch_end(self):
         """
-        每个验证 epoch 结束时调用的方法。
+        每个训练 epoch 结束时调用的方法。
         用于计算验证集的指标，记录指标并重置指标计算类。
         同时记录可视化图像。
         """
+        results = self.train_metrics.compute()
+        for k, v in results.items():
+            # 记录训练集的指标，每个 epoch 记录一次，并显示在进度条上
+            self.log(f'train/{k}', v, prog_bar=False, on_step=False, on_epoch=True)
+        # 重置训练集的指标计算类
+        self.train_metrics.reset()
+
+    def on_validation_epoch_start(self):
+        if self.ema is not None:
+            self.ema.store(self.parameters())
+            self.ema.copy_to(self.parameters())
+
+    def on_validation_epoch_end(self):
+        """
+                每个验证 epoch 结束时调用的方法。
+                用于计算验证集的指标，记录指标并重置指标计算类。
+                同时记录可视化图像。
+        """
+
+        if self.ema is not None:
+            self.ema.restore(self.parameters())
+
         # 计算验证集的指标
         results = self.val_metrics.compute()
         for k, v in results.items():
@@ -82,6 +97,27 @@ class BaseLightningModule(lightning.LightningModule):
             grid = torchvision.utils.make_grid(comparison, nrow=image_num, normalize=True, value_range=(0, 1))
             # 添加到 logger
             self.logger.experiment.add_image("val/reconstruction_vs_input", grid, self.current_epoch)
+
+    def on_save_checkpoint(self, checkpoint):
+        if self.ema is not None:
+            checkpoint["ema"] = self.ema.state_dict()
+
+    def on_load_checkpoint(self, checkpoint):
+        if "ema" not in checkpoint:
+            return
+        if self.ema is not None:
+            from diffusers import EMAModel
+            self.ema = EMAModel(parameters=self.parameters(), device="cpu")
+        self.ema.load_state_dict(checkpoint["ema"])
+
+    def on_test_start(self):
+        if self.ema is not None:
+            self.ema.store(self.parameters())
+            self.ema.copy_to(self.parameters())
+
+    def on_test_end(self):
+        if self.ema is not None:
+            self.ema.restore(self.parameters())
 
     def on_test_epoch_end(self):
         # 计算验证集的指标
@@ -194,12 +230,8 @@ class BaseLightningModule(lightning.LightningModule):
         plt.close(fig)
 
     @staticmethod
-    def save_single_image(img, filename='', title="Velocity Model",
-                          show=False, save=True, cmap='jet',
-                          extent=[0, 700, 700, 0],
-                          figsize=(5, 5),
-                          use_colorbar=True,
-                          x_label='Length (m)',
+    def save_single_image(img, filename='', title="Velocity Model", show=False, save=True, cmap='jet',
+                          extent=[0, 700, 700, 0], figsize=(5, 5), use_colorbar=True, x_label='Length (m)',
                           y_label='Depth (m)'):
         """
         保存单个灰度图像到文件

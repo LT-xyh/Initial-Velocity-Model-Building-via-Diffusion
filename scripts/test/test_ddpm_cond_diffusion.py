@@ -40,4 +40,4 @@ if __name__ == '__main__':
         test_ddpm_cond_diffusion(dataset_name)
 
     print('\n\nFaultVelA\n')
-    test_ddpm_cond_diffusion_fault()
+    # test_ddpm_cond_diffusion_fault()

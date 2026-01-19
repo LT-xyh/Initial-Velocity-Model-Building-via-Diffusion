@@ -56,8 +56,8 @@ def test_dix_CurveFaultA(batch_size, log_dir, log_version):
 
 def test_dix():
     batch_size = 100
-    log_dir = 'logs/baseline/smooth_dix'
-    log_version = '251224'
+    log_dir = 'logs/baselines/smooth_dix'
+    log_version = '260119'
     test_dix_OpenFWI(batch_size, log_dir, log_version)
     test_dix_CurveFaultA(batch_size, log_dir, log_version)
 

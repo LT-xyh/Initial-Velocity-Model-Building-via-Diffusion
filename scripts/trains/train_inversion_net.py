@@ -15,9 +15,9 @@ def train_inversion_net():
     # 获取当前日期时间
     current_date = datetime.now()
     # 格式化月份和日期为两位数，组成"MMDD"形式的字符串
-    date_str = current_date.strftime("%m%d")
+    date_str = current_date.strftime("%y%m%d-%H")
 
-    conf.training.logging.log_version = date_str + "_"
+    conf.training.logging.log_version = date_str + "_All-Data_lr-1e-3"
     model = InversionNetLightning(conf)
     base_train(model, conf, fast_run=False, use_lr_finder=False, )
 

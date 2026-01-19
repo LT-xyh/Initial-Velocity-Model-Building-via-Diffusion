@@ -83,7 +83,9 @@ class SVInvNetLightning(BaseLightningModule):
                  batch_size=self.conf.training.dataloader.batch_size)
         # 4. 评价指标
         self.test_metrics.update(depth_velocity, reconstructions)
-        self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir)
+        if batch_idx < 2:
+            self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir)
+
         return mse
 
 

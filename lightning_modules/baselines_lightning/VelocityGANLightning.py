@@ -1,7 +1,7 @@
 import torch
-from diffusers import EMAModel
 from torch.nn import functional as F
 
+from diffusers import EMAModel
 from lightning_modules.base_lightning import BaseLightningModule
 from models.baselines.VelocityGAN import (VelocityGAN_Generator_MC, VelocityGAN_Discriminator_Patch4,
                                           wgan_gp_discriminator_loss, )
@@ -19,10 +19,11 @@ class VelocityGANLightning(BaseLightningModule):
         vg = getattr(conf, "velocity_gan", None)
 
         # ===== model =====
-        in_ch = getattr(vg, "in_ch", 5) if vg is not None else 5
+        in_ch = getattr(vg, "in_ch", 2) if vg is not None else 2
+        cond_ch = getattr(vg, "cond_ch", 2) if vg is not None else 2
         g_base = getattr(vg, "base_channel", 32) if vg is not None else 32
         d_base = getattr(vg, "d_base_channel", 32) if vg is not None else 32
-        self.G = VelocityGAN_Generator_MC(in_ch=in_ch, base=g_base, target_hw=(70, 70))
+        self.G = VelocityGAN_Generator_MC(in_ch=in_ch, cond_ch=cond_ch, base=g_base, target_hw=(70, 70))
         self.D = VelocityGAN_Discriminator_Patch4(in_ch=1, base=d_base)
 
         # ===== loss weights (velocity_gan) =====
@@ -41,13 +42,9 @@ class VelocityGANLightning(BaseLightningModule):
         self.grad_clip_val = float(getattr(conf.training, "grad_clip_val", 0.0))
         self.grad_clip_algo = str(getattr(conf.training, "grad_clip_algo", "norm")).lower()
 
-        self.ema = None
-
-    def setup(self, stage):
-        super().setup(stage)
-        if getattr(self.conf.training, "use_ema", False):
-            self.ema = EMAModel(parameters=self.G.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
-                device=self.device, )
+        if self.conf.training.use_ema:
+            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
+                                device='cpu')
 
     def configure_optimizers(self):
         betas = tuple(getattr(self.conf.training, "betas", (0.0, 0.9)))
@@ -70,7 +67,7 @@ class VelocityGANLightning(BaseLightningModule):
         device_type = real.device.type
         with torch.autocast(device_type=device_type, enabled=False):
             loss_d = wgan_gp_discriminator_loss(self.D, real=real.float(), fake=fake.float(),
-                gp_lambda=self.gp_lambda, )
+                                                gp_lambda=self.gp_lambda, )
         return loss_d
 
     def training_step(self, batch, batch_idx):
@@ -112,6 +109,7 @@ class VelocityGANLightning(BaseLightningModule):
             self.log("train/loss_g", loss_g.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
             self.log("train/mae", mae.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
             self.log("train/mse", mse.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
+            self.train_metrics.update(depth_velocity, recon)
             return loss_g
 
         # =========================================================
@@ -173,22 +171,13 @@ class VelocityGANLightning(BaseLightningModule):
             d_fake = self.D.score(recon).mean()
         self.log("train/d_real", d_real, on_step=True, on_epoch=True, prog_bar=False)
         self.log("train/d_fake", d_fake, on_step=True, on_epoch=True, prog_bar=False)
+        self.train_metrics.update(depth_velocity, recon)
 
         return loss_d
 
-    def _forward_g_eval(self, migrated_image, rms_vel, horizon, well_log):
-        if self.ema is not None:
-            self.ema.store(self.G.parameters())
-            self.ema.copy_to(self.G.parameters())
-        recon = self.G(migrated_image, rms_vel, horizon, well_log)
-        if self.ema is not None:
-            self.ema.restore(self.G.parameters())
-        return recon
-
     def validation_step(self, batch, batch_idx):
         depth_velocity = batch.pop("depth_vel")
-        recon = self._forward_g_eval(migrated_image=batch["migrated_image"], rms_vel=batch["rms_vel"],
-            horizon=batch["horizon"], well_log=batch["well_log"], )
+        recon = self.G(batch["migrated_image"], batch["rms_vel"], batch["horizon"], batch["well_log"], )
         del batch
 
         mse = F.mse_loss(recon, depth_velocity)
@@ -202,8 +191,7 @@ class VelocityGANLightning(BaseLightningModule):
 
     def test_step(self, batch, batch_idx):
         depth_velocity = batch.pop("depth_vel")
-        recon = self._forward_g_eval(migrated_image=batch["migrated_image"], rms_vel=batch["rms_vel"],
-            horizon=batch["horizon"], well_log=batch["well_log"], )
+        recon = self.G(batch["migrated_image"], batch["rms_vel"], batch["horizon"], batch["well_log"], )
         del batch
 
         mse = F.mse_loss(recon, depth_velocity)
@@ -211,7 +199,8 @@ class VelocityGANLightning(BaseLightningModule):
         self.log("test/mse", mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/mae", mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
 
-        self.test_metrics.update(recon, depth_velocity)
+        self.test_metrics.update(depth_velocity, recon)
         self._last_test_batch = (depth_velocity, recon)
-        self.save_batch_torch(batch_idx, recon, save_dir=self.conf.testing.test_save_dir)
+        if batch_idx < 2:
+            self.save_batch_torch(batch_idx, recon, save_dir=self.conf.testing.test_save_dir)
         return mse

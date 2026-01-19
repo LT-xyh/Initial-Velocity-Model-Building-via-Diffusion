@@ -6,11 +6,11 @@ datasets:
     shape: [ 1, 70, 70 ]
 
 sv_inv_net:
-  base_channel: 16
+  base_channel: 32
   condition_channel: 16
 
 training:
-  lr: 1e-4
+  lr: 2e-4
   perceptual_weight: 0
   ssim_weight: 0
   use_ema: True
@@ -43,5 +43,5 @@ training:
       mode: 'max'
 
 testing:
-  test_save_dir: 'logs/baseline/sv_inv_net'
+  test_save_dir: 'logs/baselines/sv_inv_net/test_results'
   ckpt_path: ''

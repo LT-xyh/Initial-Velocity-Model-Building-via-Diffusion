@@ -1,20 +1,26 @@
 import lightning
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, ConcatDataset
 
 from data.dataset_openfwi import OpenFWI
 
 
 def base_test(model, conf, fast_run=False):
-    dataset = OpenFWI(root_dir='data/openfwi', use_data=conf.datasets.use_data, datasets=conf.datasets.dataset_name,
-                      use_normalize='-1_1')
-    total_size = len(dataset)
-    test_size = int(0.1 * total_size)  # 取最后10%作为测试集（非随机）
-    test_idx = list(range(total_size - test_size, total_size))
-    test_set = Subset(dataset, test_idx)
+    test_dataset_list = []
+    for dataset in conf.datasets.dataset_name:
+        dataset = OpenFWI(root_dir='data/openfwi', use_data=conf.datasets.use_data, datasets=(dataset,),
+                          use_normalize=conf.datasets.use_normalize)
+        total_size = len(dataset)
+        test_size = int(0.1 * total_size)  # 取最后10%作为测试集（非随机）
+        test_idx = list(range(total_size - test_size, total_size))
+        # test_idx = list(range(test_size))
 
-    test_loader = DataLoader(test_set, batch_size=conf.training.dataloader.batch_size, # shuffle=False,
+        test_dataset_list.append(Subset(dataset, test_idx))
+
+    test_set = ConcatDataset(test_dataset_list)
+
+    test_loader = DataLoader(test_set, batch_size=conf.training.dataloader.batch_size,  # shuffle=False,
                              num_workers=conf.training.dataloader.num_workers, persistent_workers=True, pin_memory=True,
                              prefetch_factor=conf.training.dataloader.prefetch_factor)
 
@@ -64,7 +70,7 @@ def base_test(model, conf, fast_run=False):
 
 def base_fault_test(model, conf, fast_run=False):
     test_set = OpenFWI(root_dir='data/openfwi', use_data=conf.datasets.use_data, datasets=('CurveFaultA',),
-                       use_normalize='-1_1')
+                       use_normalize=conf.datasets.use_normalize)
 
     test_loader = DataLoader(test_set, batch_size=conf.training.dataloader.batch_size, shuffle=False,
                              num_workers=conf.training.dataloader.num_workers, persistent_workers=True, pin_memory=True,

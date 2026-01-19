@@ -95,7 +95,7 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         depth_velocity = batch.pop('depth_vel')
 
         ldm_cond_embedding = self.ldm_cond_encoder(batch)['s16']
-        del batch
+        # del batch
 
         # 2. 模型
         recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16))
@@ -110,5 +110,12 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         # 4. 评价指标
         self.test_metrics.update(reconstructions, depth_velocity)
         self._last_test_batch = (depth_velocity, reconstructions)
-        self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir)
+        if batch_idx < 2:
+            self.save_batch_torch(batch_idx, reconstructions, save_dir=f"{self.conf.testing.test_save_dir}/Recon")
+            self.save_batch_torch(batch_idx, depth_velocity, save_dir=f"{self.conf.testing.test_save_dir}/GroundTruth")
+            self.save_batch_torch(batch_idx, batch['rms_vel'], save_dir=f"{self.conf.testing.test_save_dir}/rms_vel")
+            self.save_batch_torch(batch_idx, batch['horizon'], save_dir=f"{self.conf.testing.test_save_dir}/horizon")
+            self.save_batch_torch(batch_idx, batch['well_log'], save_dir=f"{self.conf.testing.test_save_dir}/well_log")
+            self.save_batch_torch(batch_idx, batch['migrated_image'], save_dir=f"{self.conf.testing.test_save_dir}/migrated_image")
+
         return mse
