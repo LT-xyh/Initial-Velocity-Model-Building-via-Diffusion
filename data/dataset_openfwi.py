@@ -24,7 +24,7 @@ class OpenFWI(Dataset):
     def __init__(self, root_dir='',
                  use_data=('depth_vel', 'time_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel'),
                  datasets=('FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB', 'CurveFaultA'),
-                 use_normalize='01', rms_vel_noise_std=20.0):
+                 use_normalize='01', rms_vel_noise_std=0.0):
         """
         OpenFWI数据集
         :param dataset_name: ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
@@ -63,6 +63,9 @@ class OpenFWI(Dataset):
                 normalized = True
             elif self.use_normalize is None:
                 data = data
+            if normalized and data_name == 'rms_vel' and self.rms_vel_noise_std > 0:
+                noise = torch.normal(mean=0.0, std=self.rms_vel_noise_std, size=data.shape, device=data.device)
+                data = data + noise
             data_dict.update({data_name: data})
 
         return data_dict
