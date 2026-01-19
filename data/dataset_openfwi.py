@@ -11,7 +11,7 @@ class OpenFWI(Dataset):
     OpenFWI数据集加载类。
 
     该类从OpenFWI数据目录读取不同类型的数据（如速度模型、成像结果、井数据等），
-    并根据配置对数据执行归一化处理。可选地，在rms_vel归一化后添加高斯噪声，
+    并根据配置对数据执行归一化处理。可选地，在rms_vel归一化前添加高斯噪声，
     用于数据增强或模拟测量误差。
 
     Args:
@@ -19,7 +19,7 @@ class OpenFWI(Dataset):
         use_data (tuple[str, ...]): 需要加载的数据类型。
         datasets (tuple[str, ...]): 数据子集名称列表。
         use_normalize (str | None): 归一化方式，支持'01'、'-1_1'或None。
-        rms_vel_noise_std (float): rms_vel在归一化后添加噪声的标准差，默认不添加。
+        rms_vel_noise_std (float): rms_vel在归一化前添加噪声的标准差，默认不添加。
     """
     def __init__(self, root_dir='',
                  use_data=('depth_vel', 'time_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel'),
@@ -28,7 +28,7 @@ class OpenFWI(Dataset):
         """
         OpenFWI数据集
         :param dataset_name: ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
-        :param rms_vel_noise_std: rms_vel在归一化后添加噪声的标准差，默认不添加
+        :param rms_vel_noise_std: rms_vel在归一化前添加噪声的标准差，默认不添加
         """
         self.use_data = use_data
         self.data_files = {data_name: [] for data_name in use_data}
@@ -52,7 +52,9 @@ class OpenFWI(Dataset):
         for data_name in self.data_files.keys():
             data_file = self.data_files[data_name][idx]
             data = torch.from_numpy(np.load(data_file)).to(torch.float32)
-            normalized = False
+            if data_name == 'rms_vel' and self.rms_vel_noise_std > 0:
+                noise = torch.normal(mean=0.0, std=self.rms_vel_noise_std, size=data.shape, device=data.device)
+                data = data + noise
             if self.use_normalize == '01':
                 data = self.normalize_to_zero_one(data, *self.normalize_max_min[data_name])
                 normalized = True
