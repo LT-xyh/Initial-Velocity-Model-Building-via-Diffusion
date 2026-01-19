@@ -7,34 +7,18 @@ from torch.utils.data import Dataset
 
 
 class OpenFWI(Dataset):
-    """
-    OpenFWI数据集加载类。
-
-    该类从OpenFWI数据目录读取不同类型的数据（如速度模型、成像结果、井数据等），
-    并根据配置对数据执行归一化处理。可选地，在rms_vel归一化前添加高斯噪声，
-    用于数据增强或模拟测量误差。
-
-    Args:
-        root_dir (str): 数据集根目录。
-        use_data (tuple[str, ...]): 需要加载的数据类型。
-        datasets (tuple[str, ...]): 数据子集名称列表。
-        use_normalize (str | None): 归一化方式，支持'01'、'-1_1'或None。
-        rms_vel_noise_std (float): rms_vel在归一化前添加噪声的标准差，默认不添加。
-    """
     def __init__(self, root_dir='',
                  use_data=('depth_vel', 'time_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel'),
-                 datasets=('FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB', 'CurveFaultA'),
-                 use_normalize='01', rms_vel_noise_std=0.0):
+                 datasets=('FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB', 'CurveFaultA'), use_normalize='-1_1'):
         """
         OpenFWI数据集
         :param dataset_name: ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
-        :param rms_vel_noise_std: rms_vel在归一化前添加噪声的标准差，默认不添加
+        :param
         """
         self.use_data = use_data
         self.data_files = {data_name: [] for data_name in use_data}
         self.root_dir = root_dir
         self.use_normalize = use_normalize
-        self.rms_vel_noise_std = rms_vel_noise_std
         self.normalize_max_min = {'depth_vel': [4500., 1500.], 'time_vel': [4500., 1500.], 'rms_vel': [4500., 1500.],
                                   'migrated_image': [1000., -700.], 'well_log': [4500., 1500.], 'horizon': [1., 0.], }
         for dataset_name in datasets:
@@ -52,20 +36,12 @@ class OpenFWI(Dataset):
         for data_name in self.data_files.keys():
             data_file = self.data_files[data_name][idx]
             data = torch.from_numpy(np.load(data_file)).to(torch.float32)
-            if data_name == 'rms_vel' and self.rms_vel_noise_std > 0:
-                noise = torch.normal(mean=0.0, std=self.rms_vel_noise_std, size=data.shape, device=data.device)
-                data = data + noise
             if self.use_normalize == '01':
                 data = self.normalize_to_zero_one(data, *self.normalize_max_min[data_name])
-                normalized = True
             elif self.use_normalize == '-1_1':
                 data = self.normalize_to_neg_one_to_one(data, *self.normalize_max_min[data_name])
-                normalized = True
             elif self.use_normalize is None:
                 data = data
-            if normalized and data_name == 'rms_vel' and self.rms_vel_noise_std > 0:
-                noise = torch.normal(mean=0.0, std=self.rms_vel_noise_std, size=data.shape, device=data.device)
-                data = data + noise
             data_dict.update({data_name: data})
 
         return data_dict
