@@ -57,10 +57,15 @@ class OpenFWI(Dataset):
                 data = self.gaussian_smooth_2d(data, self.rms_vel_smooth_sigma)
             if self.use_normalize == '01':
                 data = self.normalize_to_zero_one(data, *self.normalize_max_min[data_name])
+                normalized = True
             elif self.use_normalize == '-1_1':
                 data = self.normalize_to_neg_one_to_one(data, *self.normalize_max_min[data_name])
+                normalized = True
             elif self.use_normalize is None:
                 data = data
+            if normalized and data_name == 'rms_vel' and self.rms_vel_noise_std > 0:
+                noise = torch.normal(mean=0.0, std=self.rms_vel_noise_std, size=data.shape, device=data.device)
+                data = data + noise
             data_dict.update({data_name: data})
 
         return data_dict
