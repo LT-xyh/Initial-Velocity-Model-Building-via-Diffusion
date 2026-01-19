@@ -2,23 +2,40 @@ import os
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
 
 class OpenFWI(Dataset):
+    """
+    OpenFWI数据集加载类。
+
+    该类从OpenFWI数据目录读取不同类型的数据（如速度模型、成像结果、井数据等），
+    并根据配置对数据执行归一化处理。可选地，在rms_vel归一化前进行高斯平滑，
+    用于数据增强或模拟测量误差。
+
+    Args:
+        root_dir (str): 数据集根目录。
+        use_data (tuple[str, ...]): 需要加载的数据类型。
+        datasets (tuple[str, ...]): 数据子集名称列表。
+        use_normalize (str | None): 归一化方式，支持'01'、'-1_1'或None。
+        rms_vel_smooth_sigma (float): rms_vel在归一化前高斯平滑的标准差，默认不处理。
+    """
     def __init__(self, root_dir='',
                  use_data=('depth_vel', 'time_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel'),
-                 datasets=('FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB', 'CurveFaultA'), use_normalize='01'):
+                 datasets=('FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB', 'CurveFaultA'),
+                 use_normalize='01', rms_vel_smooth_sigma=0.0):
         """
         OpenFWI数据集
         :param dataset_name: ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
-        :param 
+        :param rms_vel_smooth_sigma: rms_vel在归一化前高斯平滑的标准差，默认不处理
         """
         self.use_data = use_data
         self.data_files = {data_name: [] for data_name in use_data}
         self.root_dir = root_dir
         self.use_normalize = use_normalize
+        self.rms_vel_smooth_sigma = rms_vel_smooth_sigma
         self.normalize_max_min = {'depth_vel': [4500., 1500.], 'time_vel': [4500., 1500.], 'rms_vel': [4500., 1500.],
                                   'migrated_image': [1000., -700.], 'well_log': [4500., 1500.], 'horizon': [1., 0.], }
         for dataset_name in datasets:
@@ -36,6 +53,8 @@ class OpenFWI(Dataset):
         for data_name in self.data_files.keys():
             data_file = self.data_files[data_name][idx]
             data = torch.from_numpy(np.load(data_file)).to(torch.float32)
+            if data_name == 'rms_vel' and self.rms_vel_smooth_sigma > 0:
+                data = self.gaussian_smooth_2d(data, self.rms_vel_smooth_sigma)
             if self.use_normalize == '01':
                 data = self.normalize_to_zero_one(data, *self.normalize_max_min[data_name])
             elif self.use_normalize == '-1_1':
@@ -53,6 +72,36 @@ class OpenFWI(Dataset):
     @staticmethod
     def normalize_to_neg_one_to_one(x: torch.Tensor, max_value=1, min_value=-1) -> torch.Tensor:
         return ((x - min_value) / (max_value - min_value)) * 2 - 1
+
+    @staticmethod
+    def gaussian_smooth_2d(x: torch.Tensor, sigma: float) -> torch.Tensor:
+        if sigma <= 0:
+            return x
+        kernel_size = max(3, int(6 * sigma + 1))
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        coords = torch.arange(kernel_size, device=x.device, dtype=x.dtype) - kernel_size // 2
+        gaussian = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+        gaussian = gaussian / gaussian.sum()
+        kernel_2d = torch.outer(gaussian, gaussian)
+        kernel_2d = kernel_2d / kernel_2d.sum()
+        kernel_2d = kernel_2d.unsqueeze(0).unsqueeze(0)
+
+        if x.dim() == 2:
+            data = x.unsqueeze(0).unsqueeze(0)
+            kernel = kernel_2d
+            groups = 1
+        elif x.dim() == 3:
+            data = x.unsqueeze(0)
+            channels = data.shape[1]
+            kernel = kernel_2d.expand(channels, 1, kernel_size, kernel_size)
+            groups = channels
+        else:
+            return x
+
+        padding = kernel_size // 2
+        smoothed = F.conv2d(data, kernel, padding=padding, groups=groups)
+        return smoothed.squeeze(0) if x.dim() == 3 else smoothed.squeeze(0).squeeze(0)
 
     @staticmethod
     def collate_fn(batch):
