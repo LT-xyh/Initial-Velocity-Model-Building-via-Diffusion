@@ -28,12 +28,15 @@ class CondLatentDiffusionLightning(BaseLightningModule):
 
         # 2. latent diffusion
         self.ldm = LatentConditionalDiffusion()
+        if self.conf.training.use_ema:
+            self._ema_parameters = [p for p in self.parameters() if p.requires_grad]
 
     def setup(self, stage):
         super().setup(stage)
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
-                                device=self.device)
+            if self.ema is None:
+                self.ema = EMAModel(parameters=self._ema_parameters, use_ema_warmup=True, foreach=True, power=0.75,
+                                    device=self.device)
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
@@ -47,28 +50,29 @@ class CondLatentDiffusionLightning(BaseLightningModule):
         # 2. 模型
         latents = self.ae.encode(depth_velocity)
         ldm_dict = self.ldm.training_loss(x0=latents, cond=ldm_cond_embedding, loss_type="mse")
-        recon_z = ldm_dict['pre_x0']
-        reconstructions = self.ae.decode(recon_z, cond_embedding)
+        with torch.no_grad():
+            recon_z = ldm_dict['pre_x0'].detach()
+            reconstructions = self.ae.decode(recon_z, cond_embedding)
 
         # 3. 损失
         loss = ldm_dict['loss']
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
         depth_velocity = self.unnormalize_from_neg_one_to_one(depth_velocity)
         reconstructions = self.unnormalize_from_neg_one_to_one(reconstructions)
         self.train_metrics.update(depth_velocity, reconstructions)
-        self._last_train_batch = (depth_velocity, reconstructions)
+        self._last_train_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
-            self.ema.step(self.parameters())
+            self.ema.step(self._ema_params())
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         if self.conf.training.use_ema:
-            self.ema.store(self.parameters())
-            self.ema.copy_to(self.parameters())
+            self.ema.store(self._ema_params())
+            self.ema.copy_to(self._ema_params())
 
         # 1. 数据
         depth_velocity = batch.pop('model')
@@ -80,20 +84,22 @@ class CondLatentDiffusionLightning(BaseLightningModule):
 
         # 2. 模型
         recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16))
-        reconstructions = self.ae.decode(recon_z, cond_embedding)
+        with torch.no_grad():
+            reconstructions = self.ae.decode(recon_z, cond_embedding)
 
         # 3. 损失
         depth_velocity = self.unnormalize_from_neg_one_to_one(depth_velocity)
         reconstructions = self.unnormalize_from_neg_one_to_one(reconstructions)
-        loss = F.mse_loss(depth_velocity, reconstructions)
-        self.log('val/mse', loss.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        with torch.no_grad():
+            loss = F.mse_loss(depth_velocity, reconstructions)
+        self.log('val/mse', loss.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
         self.val_metrics.update(depth_velocity, reconstructions)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:
-            self.ema.restore(self.parameters())
+            self.ema.restore(self._ema_params())
         return loss
 
 

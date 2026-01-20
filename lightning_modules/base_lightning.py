@@ -32,9 +32,13 @@ class BaseLightningModule(lightning.LightningModule):
         # 保存最后一个验证批次的数据，用于可视化
         self._last_val_batch = None
         self.ema = None
-
-
-
+        self._ema_parameters = None
+ 
+    def _ema_params(self):
+        if self._ema_parameters is not None:
+            return self._ema_parameters
+        return list(self.parameters())
+ 
     def setup(self, stage):
         if self.ema is not None:
             self.ema.to(self.device)
@@ -67,8 +71,9 @@ class BaseLightningModule(lightning.LightningModule):
 
     def on_validation_epoch_start(self):
         if self.ema is not None:
-            self.ema.store(self.parameters())
-            self.ema.copy_to(self.parameters())
+            params = self._ema_params()
+            self.ema.store(params)
+            self.ema.copy_to(params)
 
     def on_validation_epoch_end(self):
         """
@@ -78,7 +83,7 @@ class BaseLightningModule(lightning.LightningModule):
         """
 
         if self.ema is not None:
-            self.ema.restore(self.parameters())
+            self.ema.restore(self._ema_params())
 
         # 计算验证集的指标
         results = self.val_metrics.compute()
@@ -105,19 +110,19 @@ class BaseLightningModule(lightning.LightningModule):
     def on_load_checkpoint(self, checkpoint):
         if "ema" not in checkpoint:
             return
-        if self.ema is not None:
-            from diffusers import EMAModel
-            self.ema = EMAModel(parameters=self.parameters(), device="cpu")
+        from diffusers import EMAModel
+        self.ema = EMAModel(parameters=self._ema_params(), device="cpu")
         self.ema.load_state_dict(checkpoint["ema"])
 
     def on_test_start(self):
         if self.ema is not None:
-            self.ema.store(self.parameters())
-            self.ema.copy_to(self.parameters())
+            params = self._ema_params()
+            self.ema.store(params)
+            self.ema.copy_to(params)
 
     def on_test_end(self):
         if self.ema is not None:
-            self.ema.restore(self.parameters())
+            self.ema.restore(self._ema_params())
 
     def on_test_epoch_end(self):
         # 计算验证集的指标

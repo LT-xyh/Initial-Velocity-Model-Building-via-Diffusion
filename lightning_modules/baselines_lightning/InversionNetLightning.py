@@ -1,3 +1,4 @@
+import torch
 from torch.nn import functional as F
 
 from diffusers import EMAModel
@@ -12,7 +13,8 @@ class InversionNetLightning(BaseLightningModule):
         self.model = MultiConstraintInversionNet(base=conf.inversion_net.base_channel, use_tanh=False)
         self.test_save_dir = conf.testing.test_save_dir
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
+            self._ema_parameters = list(self.model.parameters())
+            self.ema = EMAModel(parameters=self._ema_parameters, use_ema_warmup=True, foreach=True, power=0.75,
                                 device='cpu')
 
     def training_step(self, batch, batch_idx):
@@ -26,12 +28,14 @@ class InversionNetLightning(BaseLightningModule):
 
         # 3. 损失
         loss = F.mse_loss(reconstructions, depth_velocity)
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=True, prog_bar=True)
 
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
-            self.ema.step(self.parameters())
+            self.ema.step(self._ema_params())
 
-        self.train_metrics.update(depth_velocity, reconstructions)
+        with torch.no_grad():
+            self.train_metrics.update(depth_velocity, reconstructions)
+        self._last_train_batch = (depth_velocity.detach(), reconstructions.detach())
 
         return loss
 
@@ -45,14 +49,16 @@ class InversionNetLightning(BaseLightningModule):
         del batch
 
         # 3. 损失
-        mse = F.mse_loss(depth_velocity, reconstructions)
-        mae = F.l1_loss(depth_velocity, reconstructions)
-        self.log('val/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        with torch.no_grad():
+            mse = F.mse_loss(depth_velocity, reconstructions)
+            mae = F.l1_loss(depth_velocity, reconstructions)
+        self.log('val/mse', mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val/mae', mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
-        self.val_metrics.update(depth_velocity, reconstructions)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        with torch.no_grad():
+            self.val_metrics.update(depth_velocity, reconstructions)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         return mse
 
@@ -65,14 +71,16 @@ class InversionNetLightning(BaseLightningModule):
         del batch
 
         # 3. 损失
-        mse = F.mse_loss(depth_velocity, reconstructions)
-        mae = F.l1_loss(depth_velocity, reconstructions)
-        self.log('test/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('test/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        with torch.no_grad():
+            mse = F.mse_loss(depth_velocity, reconstructions)
+            mae = F.l1_loss(depth_velocity, reconstructions)
+        self.log('test/mse', mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test/mae', mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
-        self.test_metrics.update(depth_velocity, reconstructions)
-        self._last_test_batch = (depth_velocity, reconstructions)
+        with torch.no_grad():
+            self.test_metrics.update(depth_velocity, reconstructions)
+        self._last_test_batch = (depth_velocity.detach(), reconstructions.detach())
         if batch_idx < 2:
             self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir)
         return mse

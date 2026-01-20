@@ -1,3 +1,4 @@
+import torch
 import torch.nn.functional as F
 
 from diffusers import EMAModel
@@ -32,7 +33,8 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         self.ldm_cond_encoder = CondFusionPyramid70()
 
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
+            self._ema_parameters = [p for p in self.parameters() if p.requires_grad]
+            self.ema = EMAModel(parameters=self._ema_parameters, use_ema_warmup=True, foreach=True, power=0.75,
                                 device="cpu")
 
     def training_step(self, batch, batch_idx):
@@ -46,21 +48,24 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         posterior = self.vae.encode(depth_velocity)
         latents = posterior.sample()
         ldm_dict = self.ldm.training_loss(x0=latents, cond=ldm_cond_embedding, loss_type="mse")
-        recon_z = ldm_dict['x0_pred']
-        reconstructions = self.vae.decode(recon_z)
+        with torch.no_grad():
+            recon_z = ldm_dict['x0_pred'].detach()
+            reconstructions = self.vae.decode(recon_z)
 
         # 3. 损失
         loss = ldm_dict['loss']
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=True, prog_bar=True)
 
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
-            self.ema.step(self.parameters())
+            self.ema.step(self._ema_params())
 
-        mse = F.mse_loss(depth_velocity, reconstructions)
-        mae = F.l1_loss(depth_velocity, reconstructions)
-        self.log('train/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('train/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.train_metrics.update(depth_velocity, reconstructions)
+        with torch.no_grad():
+            mse = F.mse_loss(depth_velocity, reconstructions)
+            mae = F.l1_loss(depth_velocity, reconstructions)
+        self.log('train/mse', mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('train/mae', mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        with torch.no_grad():
+            self.train_metrics.update(depth_velocity, reconstructions)
 
         return loss
 
@@ -73,17 +78,20 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
 
         # 2. 模型
         recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16))
-        reconstructions = self.vae.decode(recon_z)
+        with torch.no_grad():
+            reconstructions = self.vae.decode(recon_z)
 
         # 3. 损失
-        mse = F.mse_loss(depth_velocity, reconstructions)
-        mae = F.l1_loss(depth_velocity, reconstructions)
-        self.log('val/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        with torch.no_grad():
+            mse = F.mse_loss(depth_velocity, reconstructions)
+            mae = F.l1_loss(depth_velocity, reconstructions)
+        self.log('val/mse', mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val/mae', mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
-        self.val_metrics.update(reconstructions, depth_velocity)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        with torch.no_grad():
+            self.val_metrics.update(reconstructions, depth_velocity)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         return mse
 
@@ -96,17 +104,20 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
 
         # 2. 模型
         recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16))
-        reconstructions = self.vae.decode(recon_z)
+        with torch.no_grad():
+            reconstructions = self.vae.decode(recon_z)
 
         # 3. 损失
-        mse = F.mse_loss(depth_velocity, reconstructions)
-        mae = F.l1_loss(depth_velocity, reconstructions)
-        self.log('test/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('test/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        with torch.no_grad():
+            mse = F.mse_loss(depth_velocity, reconstructions)
+            mae = F.l1_loss(depth_velocity, reconstructions)
+        self.log('test/mse', mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test/mae', mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
-        self.test_metrics.update(reconstructions, depth_velocity)
-        self._last_test_batch = (depth_velocity, reconstructions)
+        with torch.no_grad():
+            self.test_metrics.update(reconstructions, depth_velocity)
+        self._last_test_batch = (depth_velocity.detach(), reconstructions.detach())
         if batch_idx < 2:
             self.save_batch_torch(batch_idx, reconstructions,
                                   save_dir=f"{self.conf.testing.test_save_dir}")  # self.save_batch_torch(batch_idx, depth_velocity, save_dir=f"{self.conf.testing.test_save_dir}/GroundTruth")  # self.save_batch_torch(batch_idx, batch['rms_vel'], save_dir=f"{self.conf.testing.test_save_dir}/rms_vel")  # self.save_batch_torch(batch_idx, batch['horizon'], save_dir=f"{self.conf.testing.test_save_dir}/horizon")  # self.save_batch_torch(batch_idx, batch['well_log'], save_dir=f"{self.conf.testing.test_save_dir}/well_log")  # self.save_batch_torch(batch_idx, batch['migrated_image'],  #                       save_dir=f"{self.conf.testing.test_save_dir}/migrated_image")

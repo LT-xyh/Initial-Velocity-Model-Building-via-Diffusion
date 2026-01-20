@@ -46,9 +46,11 @@ class AutoencoderKLLightning(BaseLightningModule):
     def setup(self, stage):
         super().setup(stage)
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(),
-                                use_ema_warmup=True, foreach=True,
-                                power=0.75, device=self.device)
+            self._ema_parameters = list(self.vae.parameters())
+            if self.ema is None:
+                self.ema = EMAModel(parameters=self._ema_parameters,
+                                    use_ema_warmup=True, foreach=True,
+                                    power=0.75, device=self.device)
 
     # —— 每个 epoch 开头刷新一次 β（也可改成按 step 刷新）——
     def on_train_epoch_start(self):
@@ -117,24 +119,24 @@ class AutoencoderKLLightning(BaseLightningModule):
                 + mse_loss * self.conf.training.loss.mse_weight
                 + kl_loss * beta)
 
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=True,
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=True,
                  prog_bar=True, batch_size=self.conf.training.dataloader.batch_size)
         self.log_dict({
-            'train/MAE': l1_loss.detach().item(),
-            'train/MSE': mse_loss.detach().item(),
-            'train/KL_raw': kl_loss_raw.detach().item(),
-            'train/KL_used': kl_loss.detach().item(),
+            'train/MAE': l1_loss.detach(),
+            'train/MSE': mse_loss.detach(),
+            'train/KL_raw': kl_loss_raw.detach(),
+            'train/KL_used': kl_loss.detach(),
             'train/beta': beta,
         }, on_step=True, on_epoch=False, prog_bar=False, batch_size=self.conf.training.dataloader.batch_size)
 
         if self.conf.training.use_ema:
-            self.ema.step(self.vae.parameters())
+            self.ema.step(self._ema_params())
         return loss
 
     def validation_step(self, batch, batch_idx):
         if self.conf.training.use_ema:
-            self.ema.store(self.vae.parameters());
-            self.ema.copy_to(self.vae.parameters())
+            self.ema.store(self._ema_params());
+            self.ema.copy_to(self._ema_params())
 
         depth_velocity = batch.pop('depth_vel')
         posterior = self.vae.encode(depth_velocity)
@@ -150,20 +152,20 @@ class AutoencoderKLLightning(BaseLightningModule):
                 + mse_loss * self.conf.training.loss.mse_weight
                 + kl_loss * beta)
 
-        self.log('val/loss', loss.detach().item(), on_step=False, on_epoch=True,
+        self.log('val/loss', loss.detach(), on_step=False, on_epoch=True,
                  prog_bar=True, batch_size=self.conf.training.dataloader.batch_size)
         self.log_dict({
-            'val/MAE': l1_loss.detach().item(),
-            'val/MSE': mse_loss.detach().item(),
-            'val/KL': kl_loss.detach().item(),
+            'val/MAE': l1_loss.detach(),
+            'val/MSE': mse_loss.detach(),
+            'val/KL': kl_loss.detach(),
             'val/beta': beta,
         }, on_step=False, on_epoch=True, prog_bar=False, batch_size=self.conf.training.dataloader.batch_size)
 
         self.val_metrics.update(reconstructions, depth_velocity)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:
-            self.ema.restore(self.vae.parameters())
+            self.ema.restore(self._ema_params())
         return loss
 
 
@@ -189,9 +191,11 @@ class AutoencoderAELightning(BaseLightningModule):
     def setup(self, stage):
         super().setup(stage)
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(),
-                                use_ema_warmup=True, foreach=True,
-                                power=0.75, device=self.device)
+            self._ema_parameters = list(self.ae.parameters())
+            if self.ema is None:
+                self.ema = EMAModel(parameters=self._ema_parameters,
+                                    use_ema_warmup=True, foreach=True,
+                                    power=0.75, device=self.device)
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
@@ -214,28 +218,28 @@ class AutoencoderAELightning(BaseLightningModule):
         loss = (recon_loss
                 + p_loss * self.conf.training.perceptual_weight
                 + ssim_loss * self.conf.training.ssim_weight).mean()
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=True, prog_bar=True)
         logs = {
-            'train/MSE': recon_loss.detach().mean().item(),
-            'train/lpips': p_loss.detach().mean().item(),
+            'train/MSE': recon_loss.detach().mean(),
+            'train/lpips': p_loss.detach().mean(),
         }
         if self.conf.training.ssim_weight > 0:
-            logs.update({'train/ssim_loss': ssim_loss.detach().mean().item()})  # SSIM损失
+            logs.update({'train/ssim_loss': ssim_loss.detach().mean()})  # SSIM损失
         self.log_dict(logs)
 
         # 4. 评价指标
         self.train_metrics.update(depth_velocity, reconstructions)
-        self._last_train_batch = (depth_velocity, reconstructions)
+        self._last_train_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
-            self.ema.step(self.ae.parameters())
+            self.ema.step(self._ema_params())
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         if self.conf.training.use_ema:
-            self.ema.store(self.ae.parameters())
-            self.ema.copy_to(self.ae.parameters())
+            self.ema.store(self._ema_params())
+            self.ema.copy_to(self._ema_params())
 
         # 1. 数据
         depth_velocity = batch['model']
@@ -259,20 +263,20 @@ class AutoencoderAELightning(BaseLightningModule):
                 + ssim_loss * self.conf.training.ssim_weight
                 ).mean()
         logs = {
-            'val/loss': loss.detach().item(),
-            'val/MSE': recon_loss.detach().mean().item(),
-            'val/lpips': p_loss.detach().mean().item(),
+            'val/loss': loss.detach(),
+            'val/MSE': recon_loss.detach().mean(),
+            'val/lpips': p_loss.detach().mean(),
         }
         if self.conf.training.ssim_weight > 0:
-            logs.update({'val/ssim_loss': ssim_loss.detach().mean().item()})  # SSIM损失
+            logs.update({'val/ssim_loss': ssim_loss.detach().mean()})  # SSIM损失
         self.log_dict(logs)
 
         # 4. 评价指标
         self.val_metrics.update(reconstructions, depth_velocity)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:
-            self.ema.restore(self.ae.parameters())
+            self.ema.restore(self._ema_params())
         return loss
 
 
@@ -314,16 +318,16 @@ class TestLightning(BaseLightningModule):
         # 组合总损失：重建损失 + KL损失(带权重) + 感知损失(带权重)
         loss = (recon_loss
                 + p_loss * self.conf.training.perceptual_weight).mean()
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=False, prog_bar=True)
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=False, prog_bar=True)
         self.log_dict({
-            'train/MSE': recon_loss.detach().mean().item(),  # 均方误差
-            'train/lpips': p_loss.detach().mean().item(),  # 感知损失
+            'train/MSE': recon_loss.detach().mean(),  # 均方误差
+            'train/lpips': p_loss.detach().mean(),  # 感知损失
         })
 
         depth_velocity = self.normalize_to_one_to_neg_one(depth_velocity)
         reconstructions = self.normalize_to_one_to_neg_one(reconstructions)
         self.train_metrics.update(depth_velocity, reconstructions)
-        self._last_train_batch = (depth_velocity, reconstructions)
+        self._last_train_batch = (depth_velocity.detach(), reconstructions.detach())
 
         # if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
         #     self.ema.step(self.parameters())
@@ -350,16 +354,16 @@ class TestLightning(BaseLightningModule):
                 + p_loss * self.conf.training.perceptual_weight).mean()
 
         self.log_dict({
-            'val/loss': loss.detach().item(),
-            'val/MSE': recon_loss.detach().mean().item(),
-            'val/lpips': p_loss.detach().mean().item(),
+            'val/loss': loss.detach(),
+            'val/MSE': recon_loss.detach().mean(),
+            'val/lpips': p_loss.detach().mean(),
         }, on_step=False, on_epoch=True, prog_bar=True)
 
         depth_velocity = self.normalize_to_one_to_neg_one(depth_velocity)
         reconstructions = self.normalize_to_one_to_neg_one(reconstructions)
         # 记录验证指标
         self.val_metrics.update(reconstructions, depth_velocity)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         # if self.conf.training.use_ema:
         #     self.ema.restore(self.parameters())

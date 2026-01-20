@@ -50,8 +50,10 @@ class CondAutoencoderLightning(BaseLightningModule):
     def setup(self, stage):
         super().setup(stage)
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
-                                device=self.device)
+            self._ema_parameters = [p for p in self.parameters() if p.requires_grad]
+            if self.ema is None:
+                self.ema = EMAModel(parameters=self._ema_parameters, use_ema_warmup=True, foreach=True, power=0.75,
+                                    device=self.device)
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
@@ -86,27 +88,27 @@ class CondAutoencoderLightning(BaseLightningModule):
         # 组合总损失：重建损失 + KL损失(带权重) + 感知损失(带权重)
         loss = (
                 recon_loss + p_loss * self.conf.training.perceptual_weight + ssim_loss * self.conf.training.ssim_weight).mean()
-        self.log('train/loss', loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
-        logs = {'train/MSE': recon_loss.detach().mean().item(), }
+        self.log('train/loss', loss.detach(), on_step=True, on_epoch=True, prog_bar=True)
+        logs = {'train/MSE': recon_loss.detach().mean(), }
         if self.use_lpips:
-            logs.update({'train/lpips_loss': p_loss.detach().mean().item()})
+            logs.update({'train/lpips_loss': p_loss.detach().mean()})
         if self.use_ssim:
-            logs.update({'train/ssim_loss': ssim_loss.detach().mean().item()})  # SSIM损失
+            logs.update({'train/ssim_loss': ssim_loss.detach().mean()})  # SSIM损失
         self.log_dict(logs)
 
         # 4. 评价指标
         self.train_metrics.update(depth_velocity, reconstructions)
-        self._last_train_batch = (depth_velocity, reconstructions)
+        self._last_train_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
-            self.ema.step(self.parameters())
+            self.ema.step(self._ema_params())
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         if self.conf.training.use_ema:
-            self.ema.store(self.parameters())
-            self.ema.copy_to(self.parameters())
+            self.ema.store(self._ema_params())
+            self.ema.copy_to(self._ema_params())
 
         # 1. 数据
         depth_velocity = batch['model']
@@ -142,21 +144,21 @@ class CondAutoencoderLightning(BaseLightningModule):
         loss = (
                 recon_loss + p_loss * self.conf.training.perceptual_weight + ssim_loss * self.conf.training.ssim_weight).mean()
 
-        self.log('val/loss', loss.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
-        logs = {'val/MSE': recon_loss.detach().mean().item(), }
+        self.log('val/loss', loss.detach(), on_step=True, on_epoch=True, prog_bar=True)
+        logs = {'val/MSE': recon_loss.detach().mean(), }
         if self.use_lpips:
-            logs.update({'val/lpips_loss': p_loss.detach().mean().item()})
+            logs.update({'val/lpips_loss': p_loss.detach().mean()})
         if self.use_ssim:
-            logs.update({'val/ssim_loss': ssim_loss.detach().mean().item()})  # SSIM损失
+            logs.update({'val/ssim_loss': ssim_loss.detach().mean()})  # SSIM损失
         self.log_dict(logs)
         # depth_velocity = self.normalize_to_one_to_neg_one(depth_velocity)
         # reconstructions = self.normalize_to_one_to_neg_one(reconstructions)
         # 记录验证指标
         self.val_metrics.update(reconstructions, depth_velocity)
-        self._last_val_batch = (depth_velocity, reconstructions)
+        self._last_val_batch = (depth_velocity.detach(), reconstructions.detach())
 
         if self.conf.training.use_ema:
-            self.ema.restore(self.parameters())
+            self.ema.restore(self._ema_params())
         return loss
 
 

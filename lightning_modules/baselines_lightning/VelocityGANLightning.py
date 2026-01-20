@@ -43,7 +43,8 @@ class VelocityGANLightning(BaseLightningModule):
         self.grad_clip_algo = str(getattr(conf.training, "grad_clip_algo", "norm")).lower()
 
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
+            self._ema_parameters = list(self.G.parameters())
+            self.ema = EMAModel(parameters=self._ema_parameters, use_ema_warmup=True, foreach=True, power=0.75,
                                 device='cpu')
 
     def configure_optimizers(self):
@@ -95,7 +96,7 @@ class VelocityGANLightning(BaseLightningModule):
             if self.lambda_grad > 0:
                 gl = self.grad_loss_yx(recon, depth_velocity)
                 loss_g = loss_g + self.lambda_grad * gl
-                self.log("train/grad_loss", gl.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
+                self.log("train/grad_loss", gl.detach(), on_step=True, on_epoch=True, prog_bar=False)
 
             opt_g.zero_grad(set_to_none=True)
             self.manual_backward(loss_g)
@@ -104,11 +105,11 @@ class VelocityGANLightning(BaseLightningModule):
             self.untoggle_optimizer(opt_g)
 
             if self.ema is not None:
-                self.ema.step(self.G.parameters())
+                self.ema.step(self._ema_params())
 
-            self.log("train/loss_g", loss_g.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
-            self.log("train/mae", mae.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
-            self.log("train/mse", mse.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
+            self.log("train/loss_g", loss_g.detach(), on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train/mae", mae.detach(), on_step=True, on_epoch=True, prog_bar=False)
+            self.log("train/mse", mse.detach(), on_step=True, on_epoch=True, prog_bar=False)
             self.train_metrics.update(depth_velocity, recon)
             return loss_g
 
@@ -129,7 +130,7 @@ class VelocityGANLightning(BaseLightningModule):
         opt_d.step()
         self.untoggle_optimizer(opt_d)
 
-        self.log("train/loss_d", loss_d.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train/loss_d", loss_d.detach(), on_step=True, on_epoch=True, prog_bar=True)
 
         # ---- (B) G step ----
         do_g = (batch_idx % self.n_critic == 0)
@@ -148,7 +149,7 @@ class VelocityGANLightning(BaseLightningModule):
             if self.lambda_grad > 0:
                 gl = self.grad_loss_yx(recon, depth_velocity)
                 loss_g = loss_g + self.lambda_grad * gl
-                self.log("train/grad_loss", gl.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
+                self.log("train/grad_loss", gl.detach(), on_step=True, on_epoch=True, prog_bar=False)
 
             opt_g.zero_grad(set_to_none=True)
             self.manual_backward(loss_g)
@@ -157,13 +158,13 @@ class VelocityGANLightning(BaseLightningModule):
             self.untoggle_optimizer(opt_g)
 
             if self.ema is not None:
-                self.ema.step(self.G.parameters())
+                self.ema.step(self._ema_params())
 
             # logs (split components)
-            self.log("train/loss_g", loss_g.detach().item(), on_step=True, on_epoch=True, prog_bar=True)
-            self.log("train/adv", adv.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
-            self.log("train/mae", mae.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
-            self.log("train/mse", mse.detach().item(), on_step=True, on_epoch=True, prog_bar=False)
+            self.log("train/loss_g", loss_g.detach(), on_step=True, on_epoch=True, prog_bar=True)
+            self.log("train/adv", adv.detach(), on_step=True, on_epoch=True, prog_bar=False)
+            self.log("train/mae", mae.detach(), on_step=True, on_epoch=True, prog_bar=False)
+            self.log("train/mse", mse.detach(), on_step=True, on_epoch=True, prog_bar=False)
 
         # monitor critic gap
         with torch.no_grad():
@@ -182,11 +183,11 @@ class VelocityGANLightning(BaseLightningModule):
 
         mse = F.mse_loss(recon, depth_velocity)
         mae = F.l1_loss(recon, depth_velocity)
-        self.log("val/mse", mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/mae", mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/mse", mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/mae", mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         self.val_metrics.update(depth_velocity, recon)
-        self._last_val_batch = (depth_velocity, recon)
+        self._last_val_batch = (depth_velocity.detach(), recon.detach())
         return mse
 
     def test_step(self, batch, batch_idx):
@@ -196,11 +197,11 @@ class VelocityGANLightning(BaseLightningModule):
 
         mse = F.mse_loss(recon, depth_velocity)
         mae = F.l1_loss(recon, depth_velocity)
-        self.log("test/mse", mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/mae", mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test/mse", mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test/mae", mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         self.test_metrics.update(depth_velocity, recon)
-        self._last_test_batch = (depth_velocity, recon)
+        self._last_test_batch = (depth_velocity.detach(), recon.detach())
         if batch_idx < 2:
             self.save_batch_torch(batch_idx, recon, save_dir=self.conf.testing.test_save_dir)
         return mse

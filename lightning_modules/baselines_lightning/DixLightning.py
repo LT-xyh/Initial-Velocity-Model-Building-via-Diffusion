@@ -23,12 +23,12 @@ class DixLightning(BaseLightningModule):
         recon = ((recon - self.vmin) / (self.vmax - self.vmin)) * 2 - 1.0  # [-1, 1]
         mse = F.mse_loss(depth_vel, recon)
         mae = F.l1_loss(depth_vel, recon)
-        self.log('test/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
-        self.log('test/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test/mse', mse.detach(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('test/mae', mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         # 4. 评价指标
         self.test_metrics.update(recon, depth_vel)
-        self._last_test_batch = (depth_vel, recon)
+        self._last_test_batch = (depth_vel.detach(), recon.detach())
         self.save_batch_torch(batch_idx, recon, save_dir=self.test_image_save_dir)
         return mse
 

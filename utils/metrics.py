@@ -42,6 +42,8 @@ class ValMetrics:
     # ---------- public api ----------
     def update(self, real: torch.Tensor, recon: torch.Tensor):
         # dtype/device 对齐 + NaN/Inf 清理
+        real = real.detach()
+        recon = recon.detach()
         if recon.dtype != real.dtype:
             recon = recon.to(real.dtype)
         real = torch.nan_to_num(real, nan=0.0, posinf=1.0, neginf=-1.0).to(self.device)
@@ -74,7 +76,7 @@ def get_psnr(original, reconstruct, data_range=1.0):
     :param data_range: 数据范围
     :return: psnr值
     """
-    psnr_metric = metrics.PSNR(data_range=data_range)
+    psnr_metric = _get_psnr_metric(data_range)
     psnr_metric.reset()
     psnr_metric.update((reconstruct, original))
     psnr = psnr_metric.compute()
@@ -89,7 +91,7 @@ def get_ssim(original, reconstruct, data_range=1.0):
     :param data_range: 数据范围
     :return: SSIM 值
     """
-    ssim_metric = metrics.SSIM(data_range=data_range)
+    ssim_metric = _get_ssim_metric(data_range)
     ssim_metric.reset()
     ssim_metric.update((original, reconstruct))
     ssim = ssim_metric.compute()
@@ -118,7 +120,7 @@ def get_is(reconstruct):
         reconstruct = expand_image_to_size(reconstruct, 128)
     if reconstruct.shape[1] == 1:
         reconstruct = reconstruct.repeat(1, 3, 1, 1)
-    is_metric = metrics.InceptionScore()
+    is_metric = _get_is_metric()
     is_metric.reset()
     is_metric.update(reconstruct)
     inception_score = is_metric.compute()
@@ -140,7 +142,7 @@ def get_fid(original, reconstruct):
         original = original.repeat(1, 3, 1, 1)
     if reconstruct.shape[1] == 1:
         reconstruct = reconstruct.repeat(1, 3, 1, 1)
-    fid_metric = metrics.FID()
+    fid_metric = _get_fid_metric()
     fid_metric.reset()
     fid_metric.update((reconstruct, original))
     fid_score = fid_metric.compute()
@@ -176,11 +178,56 @@ def get_kid(original, reconstruct):
     # 设置 subset_size 为样本数量的一半或更小
     subset_size = min(num_samples // 2, 10)  # 可以根据实际情况调整
 
-    kid = KernelInceptionDistance(subset_size=subset_size)
+    kid = _get_kid_metric(subset_size)
     kid.update(processed_real_images, real=True)
     kid.update(processed_generated_images, real=False)
     kid_mean, kid_std = kid.compute()
     return kid_mean, kid_std
+
+
+_PSNR_METRICS = {}
+_SSIM_METRICS = {}
+_IS_METRIC = None
+_FID_METRIC = None
+_KID_METRICS = {}
+
+
+def _get_psnr_metric(data_range: float):
+    metric = _PSNR_METRICS.get(data_range)
+    if metric is None:
+        metric = metrics.PSNR(data_range=data_range)
+        _PSNR_METRICS[data_range] = metric
+    return metric
+
+
+def _get_ssim_metric(data_range: float):
+    metric = _SSIM_METRICS.get(data_range)
+    if metric is None:
+        metric = metrics.SSIM(data_range=data_range)
+        _SSIM_METRICS[data_range] = metric
+    return metric
+
+
+def _get_is_metric():
+    global _IS_METRIC
+    if _IS_METRIC is None:
+        _IS_METRIC = metrics.InceptionScore()
+    return _IS_METRIC
+
+
+def _get_fid_metric():
+    global _FID_METRIC
+    if _FID_METRIC is None:
+        _FID_METRIC = metrics.FID()
+    return _FID_METRIC
+
+
+def _get_kid_metric(subset_size: int):
+    metric = _KID_METRICS.get(subset_size)
+    if metric is None:
+        metric = KernelInceptionDistance(subset_size=subset_size)
+        _KID_METRICS[subset_size] = metric
+    return metric
 
 
 def test_evaluate():

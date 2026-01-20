@@ -32,7 +32,7 @@ def fine_tuning_ddpm_cond_diffusion():
 
     model = DDPMConditionalDiffusionLightning.load_from_checkpoint(conf.testing.ckpt_path, conf=conf)
 
-    base_train_field_cut(model, conf, fast_run=False, use_lr_finder=False)
+    base_train_field_cut(model, conf, fast_run=True, use_lr_finder=False)
 
 
 if __name__ == '__main__':
