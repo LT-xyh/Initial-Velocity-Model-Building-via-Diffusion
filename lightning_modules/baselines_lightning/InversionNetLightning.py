@@ -7,14 +7,13 @@ from models.baselines.InversionNet import MultiConstraintInversionNet
 
 class InversionNetLightning(BaseLightningModule):
     def __init__(self, conf):
-        super().__init__(batch_size=conf.training.dataloader.batch_size, lr=conf.training.lr,)
+        super().__init__(batch_size=conf.training.dataloader.batch_size, lr=conf.training.lr, )
         self.conf = conf
         self.model = MultiConstraintInversionNet(base=conf.inversion_net.base_channel, use_tanh=False)
         self.test_save_dir = conf.testing.test_save_dir
         if self.conf.training.use_ema:
             self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
                                 device='cpu')
-
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
@@ -77,4 +76,3 @@ class InversionNetLightning(BaseLightningModule):
         if batch_idx < 2:
             self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir)
         return mse
-

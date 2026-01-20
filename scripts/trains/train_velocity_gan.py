@@ -17,7 +17,7 @@ def train_velocity_gan():
     torch.set_float32_matmul_precision('medium')  # 设置矩阵乘法精度利用Tensor Cores
     conf = OmegaConf.load('configs/velocity_gan.yaml')
 
-    conf.training.logging.log_version = date_str + "_All_data_-VelocityGAN"
+    conf.training.logging.log_version = date_str + "_All_data_-VelocityGAN_rms_smooth"
     model = VelocityGANLightning(conf)
     base_train(model, conf, fast_run=False, use_lr_finder=False, )
 

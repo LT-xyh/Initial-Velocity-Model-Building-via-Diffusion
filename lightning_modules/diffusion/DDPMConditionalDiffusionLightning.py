@@ -31,12 +31,9 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         # 3. Conditional encoder
         self.ldm_cond_encoder = CondFusionPyramid70()
 
-    def setup(self, stage):
-        super().setup(stage)
         if self.conf.training.use_ema:
-            self.ema = EMAModel(parameters=self.parameters(),
-                                use_ema_warmup=True, foreach=True,
-                                power=0.75, device=self.device)
+            self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
+                                device="cpu")
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
@@ -49,8 +46,8 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         posterior = self.vae.encode(depth_velocity)
         latents = posterior.sample()
         ldm_dict = self.ldm.training_loss(x0=latents, cond=ldm_cond_embedding, loss_type="mse")
-        # recon_z = ldm_dict['x0_pred']
-        # reconstructions = self.vae.decode(recon_z)
+        recon_z = ldm_dict['x0_pred']
+        reconstructions = self.vae.decode(recon_z)
 
         # 3. 损失
         loss = ldm_dict['loss']
@@ -59,13 +56,15 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
             self.ema.step(self.parameters())
 
+        mse = F.mse_loss(depth_velocity, reconstructions)
+        mae = F.l1_loss(depth_velocity, reconstructions)
+        self.log('train/mse', mse.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        self.log('train/mae', mae.detach().item(), on_step=False, on_epoch=True, prog_bar=True)
+        self.train_metrics.update(depth_velocity, reconstructions)
+
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.conf.training.use_ema:
-            self.ema.store(self.parameters())
-            self.ema.copy_to(self.parameters())
-
         # 1. 数据
         depth_velocity = batch.pop('depth_vel')
 
@@ -86,8 +85,6 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         self.val_metrics.update(reconstructions, depth_velocity)
         self._last_val_batch = (depth_velocity, reconstructions)
 
-        if self.conf.training.use_ema:
-            self.ema.restore(self.parameters())
         return mse
 
     def test_step(self, batch, batch_idx):
@@ -111,11 +108,7 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         self.test_metrics.update(reconstructions, depth_velocity)
         self._last_test_batch = (depth_velocity, reconstructions)
         if batch_idx < 2:
-            self.save_batch_torch(batch_idx, reconstructions, save_dir=f"{self.conf.testing.test_save_dir}/Recon")
-            self.save_batch_torch(batch_idx, depth_velocity, save_dir=f"{self.conf.testing.test_save_dir}/GroundTruth")
-            self.save_batch_torch(batch_idx, batch['rms_vel'], save_dir=f"{self.conf.testing.test_save_dir}/rms_vel")
-            self.save_batch_torch(batch_idx, batch['horizon'], save_dir=f"{self.conf.testing.test_save_dir}/horizon")
-            self.save_batch_torch(batch_idx, batch['well_log'], save_dir=f"{self.conf.testing.test_save_dir}/well_log")
-            self.save_batch_torch(batch_idx, batch['migrated_image'], save_dir=f"{self.conf.testing.test_save_dir}/migrated_image")
+            self.save_batch_torch(batch_idx, reconstructions,
+                                  save_dir=f"{self.conf.testing.test_save_dir}")  # self.save_batch_torch(batch_idx, depth_velocity, save_dir=f"{self.conf.testing.test_save_dir}/GroundTruth")  # self.save_batch_torch(batch_idx, batch['rms_vel'], save_dir=f"{self.conf.testing.test_save_dir}/rms_vel")  # self.save_batch_torch(batch_idx, batch['horizon'], save_dir=f"{self.conf.testing.test_save_dir}/horizon")  # self.save_batch_torch(batch_idx, batch['well_log'], save_dir=f"{self.conf.testing.test_save_dir}/well_log")  # self.save_batch_torch(batch_idx, batch['migrated_image'],  #                       save_dir=f"{self.conf.testing.test_save_dir}/migrated_image")
 
         return mse

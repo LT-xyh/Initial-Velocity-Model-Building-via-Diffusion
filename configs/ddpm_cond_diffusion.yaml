@@ -1,6 +1,6 @@
 datasets:
   use_data: [ 'depth_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel' ] # ('depth_vel', 'time_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel')
-  dataset_name: [ 'FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB' ] #['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
+  dataset_name: ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']  #[ 'CurveVelA', ]
   use_normalize: '-1_1'  # '01' '-1_1'
   depth_velocity:
     shape: [ 1, 70, 70 ]
@@ -13,7 +13,7 @@ latent_diffusion:
     scheduler_type: 'ddpm'
     num_train_timesteps: 1000
   cond:
-    model_mode : 'crossattn'
+    model_mode: 'crossattn'
 
 training:
   lr: 1e-4
@@ -21,7 +21,7 @@ training:
   gradient_clip_val: 1.0
 
   max_epochs: 150
-  min_epochs: 10
+  min_epochs: 50
   device: [ 0, ]
   precision: 'bf16-mixed'
 
@@ -49,3 +49,4 @@ training:
 
 testing:
   test_save_dir: 'logs/ddpm_diffusion/test_results/'
+  ckpt_path: ''

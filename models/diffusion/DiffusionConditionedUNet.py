@@ -169,7 +169,7 @@ class LatentConditionalDiffusion(nn.Module):
             cond_channels=64,
             mode="crossattn",  # 'crossattn' | 'concat' | 'adapter'
             token_pool=None,  # crossattn 下可选的平均池化降 token
-            block_out_channels=(128, 256, 256),
+            block_out_channels=(128, 128, 256),
             attention_head_dim=8,
         )
 

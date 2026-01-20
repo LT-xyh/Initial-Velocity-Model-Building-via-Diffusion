@@ -1,5 +1,3 @@
-import os.path
-
 import torch
 from torch.nn import functional as F
 
@@ -13,22 +11,19 @@ class SVInvNetLightning(BaseLightningModule):
         super().__init__(batch_size=conf.training.dataloader.batch_size, lr=conf.training.lr, data_range=2.0)
         self.conf = conf
         self.test_save_dir = conf.testing.test_save_dir
-        self.model = MultiConstraintSVInvNet(base_ch=conf.sv_inv_net.base_channel, cond_ch=conf.sv_inv_net.condition_channel,
-                                             growth=64, use_tanh=True)
-
-    def setup(self, stage):
-        super().setup(stage)
+        self.model = MultiConstraintSVInvNet(base_ch=conf.sv_inv_net.base_channel,
+                                             cond_ch=conf.sv_inv_net.condition_channel, growth=64, use_tanh=True)
         if self.conf.training.use_ema:
             self.ema = EMAModel(parameters=self.parameters(), use_ema_warmup=True, foreach=True, power=0.75,
-                                device=self.device)
+                                device='cpu')
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
         depth_velocity = batch.pop('depth_vel')
 
         # 2. 模型
-        reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'),
-                                     batch.pop('horizon'), batch.pop('well_log'))
+        reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'), batch.pop('horizon'),
+                                     batch.pop('well_log'))
         del batch
 
         # 3. 损失
@@ -38,19 +33,16 @@ class SVInvNetLightning(BaseLightningModule):
 
         if self.conf.training.use_ema:  # 如果启用了EMA，则更新EMA参数
             self.ema.step(self.parameters())
-
+        self.train_metrics.update(depth_velocity, reconstructions)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        if self.conf.training.use_ema:
-            self.ema.store(self.parameters())
-            self.ema.copy_to(self.parameters())
 
         depth_velocity = batch.pop('depth_vel')
 
         # 2. 模型
-        reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'),
-                                     batch.pop('horizon'), batch.pop('well_log'))
+        reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'), batch.pop('horizon'),
+                                     batch.pop('well_log'))
         del batch
 
         # 3. 损失
@@ -65,14 +57,12 @@ class SVInvNetLightning(BaseLightningModule):
         self.val_metrics.update(depth_velocity, reconstructions)
         self._last_val_batch = (depth_velocity, reconstructions)
 
-        if self.conf.training.use_ema:
-            self.ema.restore(self.parameters())
         return mse
 
     def test_step(self, batch, batch_idx):
         depth_velocity = batch.pop('depth_vel')
-        reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'),
-                                     batch.pop('horizon'), batch.pop('well_log'))
+        reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'), batch.pop('horizon'),
+                                     batch.pop('well_log'))
         del batch
         # 3. 损失
         mse = F.mse_loss(depth_velocity, reconstructions)
@@ -314,8 +304,6 @@ class MHAblationSVInvNetLightning(SVInvNetLightning):
         # self.save_batch_images(batch_idx, depth_velocity, reconstructions, self.test_save_dir)
         # self.save_batch_torch(batch_idx, reconstructions, self.test_save_dir)
         return loss
-
-
 
 
 class MWAblationSVInvNetLightning(SVInvNetLightning):

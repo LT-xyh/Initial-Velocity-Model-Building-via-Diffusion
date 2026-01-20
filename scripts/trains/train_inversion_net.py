@@ -17,15 +17,15 @@ def train_inversion_net():
     # 格式化月份和日期为两位数，组成"MMDD"形式的字符串
     date_str = current_date.strftime("%y%m%d-%H")
 
-    conf.training.logging.log_version = date_str + "_All-Data_lr-1e-3"
+    conf.training.logging.log_version = date_str + "_All_data_lr-1e-3_rms-smooth"
     model = InversionNetLightning(conf)
     base_train(model, conf, fast_run=False, use_lr_finder=False, )
 
 
 if __name__ == '__main__':
-    # pid = 9940
-    # while psutil.pid_exists(pid):
-    #     time.sleep(60)
+    pid = 11112
+    while psutil.pid_exists(pid):
+        time.sleep(60)
     train_inversion_net()
 
 

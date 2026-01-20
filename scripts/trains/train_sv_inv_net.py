@@ -16,7 +16,7 @@ def train_sv_inv_net():
     # 格式化月份和日期为两位数，组成"MMDD"形式的字符串
     date_str = current_date.strftime("%y%m%d-%H")
 
-    conf.training.logging.log_version = date_str + "_All-Data"
+    conf.training.logging.log_version = date_str + "_All-Data_rms-smooth"
     model = SVInvNetLightning(conf)
     base_train(model, conf, fast_run=False, use_lr_finder=False  , )
 
