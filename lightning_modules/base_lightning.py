@@ -9,6 +9,7 @@ import torchvision
 
 from diffusers import EMAModel
 from utils.metrics import ValMetrics
+from utils.visualize import save_multiple_curves
 
 
 class BaseLightningModule(lightning.LightningModule):
@@ -174,10 +175,35 @@ class BaseLightningModule(lightning.LightningModule):
             self.save_images(img1=x_numpys[b], img2=recon_numpys[b], filename=filename, title2=title2)
         return
 
-    def save_batch_torch(self, batch_idx, recon, save_dir):
+    def save_batch_torch(self, batch_idx, recon, save_dir, well_log=None, well_threshold=-1.0, visualize_well=True):
         os.makedirs(save_dir, exist_ok=True)
         filename = os.path.join(save_dir, f'{batch_idx}.pt')
         torch.save(recon.cpu().detach().float(), filename)
+        if well_log is not None:
+            well_dir = os.path.join(save_dir, 'well_log')
+            os.makedirs(well_dir, exist_ok=True)
+            well_filename = os.path.join(well_dir, f'{batch_idx}.pt')
+            torch.save(well_log.cpu().detach().float(), well_filename)
+            if visualize_well:
+                # Visualize the first sample's well log mask and a representative curve if available.
+                well_np = well_log.detach().cpu().float().numpy()
+                if well_np.ndim >= 3:
+                    first = well_np[0]
+                    if first.ndim == 3 and first.shape[0] == 1:
+                        first = first[0]
+                    img_path = os.path.join(well_dir, f'{batch_idx}_well_log.svg')
+                    self.save_single_image(first, filename=img_path, title="Well Log", show=False, save=True,
+                                           cmap='jet', extent=None, figsize=(5, 5), use_colorbar=False,
+                                           x_label='Length (m)', y_label='Depth (m)')
+                    mask = first >= well_threshold
+                    cols = np.where(mask.any(axis=0))[0].tolist()
+                    if cols:
+                        curves = [first[:, col] for col in cols]
+                        labels = [f'x={col}' for col in cols]
+                        curve_path = os.path.join(well_dir, f'{batch_idx}_well_curves.svg')
+                        save_multiple_curves(curves, labels=labels, filename=curve_path, title="Well log",
+                                             x_label="Depth (m)", y_label="Velocity (normalized)",
+                                             show=False, save=True, figsize=(6, 6), colors=None, linestyles=None)
         return
 
     @staticmethod
@@ -291,3 +317,29 @@ class BaseLightningModule(lightning.LightningModule):
         Ly = F.l1_loss(dy(pred), dy(gt))
         Lx = F.l1_loss(dx(pred), dx(gt))
         return w_y * Ly + w_x * Lx
+
+    @staticmethod
+    def well_match_metrics(recon, target, well_log, well_threshold=-1.0):
+        if well_log is None:
+            return None
+        mask = (well_log >= well_threshold)
+        mask_f = mask.float()
+        valid = mask_f.sum()
+        device = recon.device
+        if valid <= 0:
+            zero = torch.tensor(0.0, device=device)
+            return {"well_mae": zero, "well_mse": zero, "well_cc": zero, "well_count": zero}
+        diff = recon - target
+        well_mae = (diff.abs() * mask_f).sum() / valid
+        well_mse = ((diff ** 2) * mask_f).sum() / valid
+        # Pearson correlation over well positions
+        tgt_vals = target[mask]
+        rec_vals = recon[mask]
+        tgt_centered = tgt_vals - tgt_vals.mean()
+        rec_centered = rec_vals - rec_vals.mean()
+        denom = torch.sqrt((tgt_centered ** 2).sum()) * torch.sqrt((rec_centered ** 2).sum())
+        if denom <= 0:
+            well_cc = torch.tensor(0.0, device=device)
+        else:
+            well_cc = (tgt_centered * rec_centered).sum() / denom
+        return {"well_mae": well_mae, "well_mse": well_mse, "well_cc": well_cc, "well_count": valid}

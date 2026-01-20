@@ -34,7 +34,7 @@ def test_dix_OpenFWI(batch_size, log_dir, log_version):
         log_version = f'{log_version}_{dataset}'
         test_image_save_dir = os.path.join(log_dir, 'test_torch', log_version)
         model = DixLightning(batch_size=batch_size, test_image_save_dir=test_image_save_dir)
-        dataset = OpenFWI(root_dir='data/openfwi', use_data=('depth_vel', 'rms_vel'),
+        dataset = OpenFWI(root_dir='data/openfwi', use_data=('depth_vel', 'rms_vel', 'well_log'),
                           datasets=(dataset,),
                           use_normalize=None)
         total_size = len(dataset)
@@ -48,7 +48,7 @@ def test_dix_CurveFaultA(batch_size, log_dir, log_version):
     log_version = f'{log_version}_CurveFaultA'
     test_image_save_dir = os.path.join(log_dir, 'test_torch', log_version)
     model = DixLightning(batch_size=batch_size, test_image_save_dir=test_image_save_dir)
-    test_set = OpenFWI(root_dir='data/openfwi', use_data=('depth_vel', 'rms_vel'),
+    test_set = OpenFWI(root_dir='data/openfwi', use_data=('depth_vel', 'rms_vel', 'well_log'),
                        datasets=('CurveFaultA',),
                        use_normalize=None)
     base_test_dix(model, test_set, batch_size, log_dir, log_version)
@@ -57,7 +57,7 @@ def test_dix_CurveFaultA(batch_size, log_dir, log_version):
 def test_dix():
     batch_size = 100
     log_dir = 'logs/baselines/smooth_dix'
-    log_version = '260119'
+    log_version = '260120_well'
     test_dix_OpenFWI(batch_size, log_dir, log_version)
     test_dix_CurveFaultA(batch_size, log_dir, log_version)
 

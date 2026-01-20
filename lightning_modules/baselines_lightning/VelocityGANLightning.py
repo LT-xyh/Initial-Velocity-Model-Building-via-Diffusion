@@ -192,6 +192,7 @@ class VelocityGANLightning(BaseLightningModule):
 
     def test_step(self, batch, batch_idx):
         depth_velocity = batch.pop("depth_vel")
+        well_log = batch.get("well_log", None)
         recon = self.G(batch["migrated_image"], batch["rms_vel"], batch["horizon"], batch["well_log"], )
         del batch
 
@@ -201,7 +202,12 @@ class VelocityGANLightning(BaseLightningModule):
         self.log("test/mae", mae.detach(), on_step=False, on_epoch=True, prog_bar=True)
 
         self.test_metrics.update(depth_velocity, recon)
+        well_metrics = self.well_match_metrics(recon, depth_velocity, well_log)
+        if well_metrics is not None:
+            self.log("test/well_mae", well_metrics["well_mae"].detach(), on_step=False, on_epoch=True, prog_bar=True)
+            self.log("test/well_mse", well_metrics["well_mse"].detach(), on_step=False, on_epoch=True, prog_bar=True)
+            self.log("test/well_cc", well_metrics["well_cc"].detach(), on_step=False, on_epoch=True, prog_bar=True)
         self._last_test_batch = (depth_velocity.detach(), recon.detach())
         if batch_idx < 2:
-            self.save_batch_torch(batch_idx, recon, save_dir=self.conf.testing.test_save_dir)
+            self.save_batch_torch(batch_idx, recon, save_dir=self.conf.testing.test_save_dir, well_log=well_log)
         return mse

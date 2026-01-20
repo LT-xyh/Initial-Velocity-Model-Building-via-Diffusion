@@ -98,6 +98,7 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
     def test_step(self, batch, batch_idx):
         # 1. 数据
         depth_velocity = batch.pop('depth_vel')
+        well_log = batch.get('well_log', None)
 
         ldm_cond_embedding = self.ldm_cond_encoder(batch)['s16']
         # del batch
@@ -117,9 +118,15 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         # 4. 评价指标
         with torch.no_grad():
             self.test_metrics.update(reconstructions, depth_velocity)
+            well_metrics = self.well_match_metrics(reconstructions, depth_velocity, well_log)
+            if well_metrics is not None:
+                self.log('test/well_mae', well_metrics['well_mae'].detach(), on_step=False, on_epoch=True, prog_bar=True)
+                self.log('test/well_mse', well_metrics['well_mse'].detach(), on_step=False, on_epoch=True, prog_bar=True)
+                self.log('test/well_cc', well_metrics['well_cc'].detach(), on_step=False, on_epoch=True, prog_bar=True)
         self._last_test_batch = (depth_velocity.detach(), reconstructions.detach())
         if batch_idx < 2:
             self.save_batch_torch(batch_idx, reconstructions,
-                                  save_dir=f"{self.conf.testing.test_save_dir}")  # self.save_batch_torch(batch_idx, depth_velocity, save_dir=f"{self.conf.testing.test_save_dir}/GroundTruth")  # self.save_batch_torch(batch_idx, batch['rms_vel'], save_dir=f"{self.conf.testing.test_save_dir}/rms_vel")  # self.save_batch_torch(batch_idx, batch['horizon'], save_dir=f"{self.conf.testing.test_save_dir}/horizon")  # self.save_batch_torch(batch_idx, batch['well_log'], save_dir=f"{self.conf.testing.test_save_dir}/well_log")  # self.save_batch_torch(batch_idx, batch['migrated_image'],  #                       save_dir=f"{self.conf.testing.test_save_dir}/migrated_image")
+                                  save_dir=f"{self.conf.testing.test_save_dir}", well_log=well_log)
+            # self.save_batch_torch(batch_idx, depth_velocity, save_dir=f"{self.conf.testing.test_save_dir}/GroundTruth")  # self.save_batch_torch(batch_idx, batch['rms_vel'], save_dir=f"{self.conf.testing.test_save_dir}/rms_vel")  # self.save_batch_torch(batch_idx, batch['horizon'], save_dir=f"{self.conf.testing.test_save_dir}/horizon")  # self.save_batch_torch(batch_idx, batch['well_log'], save_dir=f"{self.conf.testing.test_save_dir}/well_log")  # self.save_batch_torch(batch_idx, batch['migrated_image'],  #                       save_dir=f"{self.conf.testing.test_save_dir}/migrated_image")
 
         return mse

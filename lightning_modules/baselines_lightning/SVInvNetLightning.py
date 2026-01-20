@@ -62,6 +62,7 @@ class SVInvNetLightning(BaseLightningModule):
 
     def test_step(self, batch, batch_idx):
         depth_velocity = batch.pop('depth_vel')
+        well_log = batch.get('well_log', None)
         reconstructions = self.model(batch.pop('migrated_image'), batch.pop('rms_vel'), batch.pop('horizon'),
                                      batch.pop('well_log'))
         del batch
@@ -74,8 +75,14 @@ class SVInvNetLightning(BaseLightningModule):
                  batch_size=self.conf.training.dataloader.batch_size)
         # 4. 评价指标
         self.test_metrics.update(depth_velocity, reconstructions)
+        well_metrics = self.well_match_metrics(reconstructions, depth_velocity, well_log)
+        if well_metrics is not None:
+            self.log('test/well_mae', well_metrics['well_mae'].detach(), on_step=False, on_epoch=True, prog_bar=True)
+            self.log('test/well_mse', well_metrics['well_mse'].detach(), on_step=False, on_epoch=True, prog_bar=True)
+            self.log('test/well_cc', well_metrics['well_cc'].detach(), on_step=False, on_epoch=True, prog_bar=True)
         if batch_idx < 2:
-            self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir)
+            self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir,
+                                  well_log=well_log)
 
         return mse
 
