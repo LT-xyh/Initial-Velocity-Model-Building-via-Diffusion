@@ -1,0 +1,84 @@
+import os
+from typing import Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn.functional as F
+from pytorch_grad_cam import GradCAM
+
+
+class ScalarTarget:
+    """Selects a single scalar from model output for Grad-CAM."""
+
+    def __init__(self, index: int = 0):
+        self.index = int(index)
+
+    def __call__(self, model_output):
+        if model_output.ndim == 0:
+            return model_output
+        return model_output[self.index]
+
+
+def _to_numpy_2d(t: torch.Tensor) -> np.ndarray:
+    arr = t.detach().float().cpu().numpy()
+    if arr.ndim == 4:
+        arr = arr[0]
+    if arr.ndim == 3:
+        if arr.shape[0] == 1:
+            arr = arr[0]
+        else:
+            arr = arr.mean(axis=0)
+    return arr
+
+
+def _normalize_minmax(arr: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    mn = float(arr.min())
+    mx = float(arr.max())
+    if mx - mn < eps:
+        return np.zeros_like(arr)
+    return (arr - mn) / (mx - mn + eps)
+
+
+def _ensure_dir(path: str):
+    os.makedirs(path, exist_ok=True)
+
+
+def save_image(arr: np.ndarray, out_path: str, cmap: str = "jet", title: Optional[str] = None):
+    _ensure_dir(os.path.dirname(out_path))
+    plt.figure(figsize=(5, 5))
+    plt.imshow(arr, cmap=cmap, aspect="auto")
+    if title:
+        plt.title(title)
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+
+def save_cam_overlay(base_img: np.ndarray, cam: np.ndarray, out_path: str, alpha: float = 0.5):
+    _ensure_dir(os.path.dirname(out_path))
+    base = _normalize_minmax(base_img)
+    cam_n = _normalize_minmax(cam)
+    plt.figure(figsize=(5, 5))
+    plt.imshow(base, cmap="gray", aspect="auto")
+    plt.imshow(cam_n, cmap="jet", alpha=alpha, aspect="auto")
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+
+def run_gradcam(model, target_layer, input_tensors, use_cuda: bool):
+    cam = GradCAM(model=model, target_layers=[target_layer], use_cuda=use_cuda)
+    targets = [ScalarTarget(0)]
+    grayscale_cam = cam(input_tensor=input_tensors, targets=targets)
+    if isinstance(grayscale_cam, np.ndarray):
+        return grayscale_cam
+    return np.array(grayscale_cam)
+
+
+def prepare_base_image(t: torch.Tensor, target_hw=(70, 70)) -> np.ndarray:
+    if t.ndim == 4 and t.shape[-2:] != target_hw:
+        t = F.adaptive_avg_pool2d(t, target_hw)
+    return _to_numpy_2d(t)
