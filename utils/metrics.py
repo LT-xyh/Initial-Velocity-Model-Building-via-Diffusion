@@ -263,7 +263,7 @@ def test_VAEMetrics():
     width = 70
     original_images = torch.rand(batch_size, channels, height, width).to('cuda:4')
     reconstructed_images = torch.rand(batch_size, channels, height, width).to('cuda:4')
-    test_metrics = ValMetrics(subset_size=batch_size // 2, device="cuda:4")
+    test_metrics = ValMetrics(device="cuda:4")
     test_metrics.reset()
     test_metrics.update(original_images, reconstructed_images)
     print(test_metrics.compute())
