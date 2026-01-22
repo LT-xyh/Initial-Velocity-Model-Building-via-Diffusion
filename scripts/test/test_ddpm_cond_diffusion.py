@@ -13,7 +13,7 @@ def test_ddpm_cond_diffusion_fault():
     torch.set_float32_matmul_precision('medium')  # 设置矩阵乘法精度利用Tensor Cores
     conf = OmegaConf.load('configs/ddpm_cond_diffusion.yaml')
     conf.testing.test_save_dir = f'{conf.testing.test_save_dir}/test/fault_{date_str}'
-    conf.testing.ckpt_path = 'logs/ddpm_diffusion/tensorboard/base_cond-all_data-1230/checkpoints/last.ckpt'
+    conf.testing.ckpt_path = 'logs/ddpm_diffusion/tensorboard/260120-16base_cond-CA_rms-smooth/checkpoints/epoch_28-loss0.880.ckpt'
     conf.training.logging.log_version = f"test_fault_{date_str}_all-data"
     model = DDPMConditionalDiffusionLightning.load_from_checkpoint(conf.testing.ckpt_path, conf=conf)
     base_fault_test(model, conf, fast_run=False)
@@ -27,7 +27,7 @@ def test_ddpm_cond_diffusion(dataset_name):
     conf.datasets.dataset_name = [dataset_name, ]
 
     conf.testing.test_save_dir = f'{conf.testing.test_save_dir}/test_{date_str}/{dataset_name}'
-    conf.testing.ckpt_path = 'logs/ddpm_diffusion/tensorboard/base_cond-all_data-1230/checkpoints/epoch_25-loss0.926.ckpt'
+    conf.testing.ckpt_path = 'logs/ddpm_diffusion/tensorboard/260120-16base_cond-CA_rms-smooth/checkpoints/epoch_28-loss0.880.ckpt'
     conf.training.logging.log_version = f"test/{date_str}_{dataset_name}"
     model = DDPMConditionalDiffusionLightning.load_from_checkpoint(conf.testing.ckpt_path, conf=conf)
     base_test(model, conf, fast_run=False)

@@ -16,7 +16,7 @@ def test_sv_inv_net(dataset_name):
     conf.datasets.dataset_name = [dataset_name, ]
 
     conf.testing.test_save_dir = f'{conf.testing.test_save_dir}/test_{date_str}/{dataset_name}'
-    conf.testing.ckpt_path = 'logs/baselines/sv_inv_net/tensorboard/26010813_All-Data/checkpoints/epoch_0-ssim0.656.ckpt'
+    conf.testing.ckpt_path = 'logs/baselines/sv_inv_net/tensorboard/260119-18_All-Data_rms-smooth/checkpoints/epoch_37-ssim0.732.ckpt'
     conf.training.logging.log_version = f"test/{date_str}_{dataset_name}"
     model = SVInvNetLightning.load_from_checkpoint(conf.testing.ckpt_path, conf=conf)
     base_test(model, conf, fast_run=False)

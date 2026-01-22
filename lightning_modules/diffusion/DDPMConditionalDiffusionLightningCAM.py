@@ -118,31 +118,39 @@ class DDPMConditionalDiffusionLightningCAM(DDPMConditionalDiffusionLightning):
                 save_image(prepare_base_image(well), os.path.join(
                     batch_dir, f"t{t}_seed{seed}_input_well_sample{sidx}.png"))
 
-            with torch.set_grad_enabled(True):
-                autocast_ctx = torch.cuda.amp.autocast(enabled=not disable_amp) if use_cuda else nullcontext()
-                with autocast_ctx:
-                    for name, layer in layers.items():
-                        runner.zero_grad(set_to_none=True)
-                        inputs = (v_gt, mig, rms, hor, well)
-                        cam_map = run_gradcam(runner, layer, inputs, use_cuda=use_cuda)[0]
+            # Lightning eval/test often runs under inference_mode; disable it here for CAM.
+            with torch.inference_mode(False):
+                with torch.set_grad_enabled(True):
+                    autocast_ctx = torch.cuda.amp.autocast(enabled=not disable_amp) if use_cuda else nullcontext()
+                    with autocast_ctx:
+                        for name, layer in layers.items():
+                            runner.zero_grad(set_to_none=True)
+                            inputs = (v_gt, mig, rms, hor, well)
+                            base, primary_index = {
+                                "rms": (rms, 2),
+                                "migrated": (mig, 1),
+                                "horizon": (hor, 3),
+                                "well": (well, 4),
+                            }[name]
+                            cam_map = run_gradcam(
+                                runner,
+                                layer,
+                                inputs,
+                                use_cuda=use_cuda,
+                                primary_input=base,
+                                primary_index=primary_index,
+                            )[0]
+                            base_img = prepare_base_image(base)
+                            out_path = os.path.join(
+                                batch_dir,
+                                f"t{t}_seed{seed}_targetGlobalMAE_branch{name}_sample{sidx}.png",
+                            )
+                            save_cam_overlay(base_img, cam_map, out_path)
 
-                        base = {
-                            "rms": rms,
-                            "migrated": mig,
-                            "horizon": hor,
-                            "well": well,
-                        }[name]
-                        base_img = prepare_base_image(base)
-                        out_path = os.path.join(
-                            batch_dir,
-                            f"t{t}_seed{seed}_targetGlobalMAE_branch{name}_sample{sidx}.png",
-                        )
-                        save_cam_overlay(base_img, cam_map, out_path)
-
-                        if self.cam_cfg.get("save_npy", False):
-                            npy_path = out_path.replace(".png", ".npy")
-                            os.makedirs(os.path.dirname(npy_path), exist_ok=True)
-                            np.save(npy_path, cam_map)
+                            if self.cam_cfg.get("save_npy", False):
+                                npy_path = out_path.replace(".png", ".npy")
+                                os.makedirs(os.path.dirname(npy_path), exist_ok=True)
+                                np.save(npy_path, cam_map)
 
             if self.cam_cfg.get("save_pred_gt", True):
                 with torch.set_grad_enabled(True):

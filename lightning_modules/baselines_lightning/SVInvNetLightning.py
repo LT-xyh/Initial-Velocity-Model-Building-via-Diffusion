@@ -77,9 +77,9 @@ class SVInvNetLightning(BaseLightningModule):
         self.test_metrics.update(depth_velocity, reconstructions)
         well_metrics = self.well_match_metrics(reconstructions, depth_velocity, well_log)
         if well_metrics is not None:
-            self.log('test/well_mae', well_metrics['well_mae'].detach(), on_step=False, on_epoch=True, prog_bar=True)
-            self.log('test/well_mse', well_metrics['well_mse'].detach(), on_step=False, on_epoch=True, prog_bar=True)
-            self.log('test/well_cc', well_metrics['well_cc'].detach(), on_step=False, on_epoch=True, prog_bar=True)
+            self.log('test/well_mae', well_metrics['well_mae'].detach(), on_step=False, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
+            self.log('test/well_mse', well_metrics['well_mse'].detach(), on_step=False, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
+            self.log('test/well_cc', well_metrics['well_cc'].detach(), on_step=False, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
         if batch_idx < 2:
             self.save_batch_torch(batch_idx, reconstructions, save_dir=self.conf.testing.test_save_dir,
                                   well_log=well_log)
