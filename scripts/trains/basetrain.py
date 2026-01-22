@@ -11,7 +11,7 @@ from data.dataset_openfwi import OpenFWI
 
 def _get_log_every_n_steps(conf, batch_size):
     # Respect explicit config override if present; Lightning requires >= 1.
-    if hasattr(conf, "training") and "log_every_n_steps" in conf.training:
+    if hasattr(conf, "training") and hasattr(conf.training, "log_every_n_steps"):
         try:
             override = int(conf.training.log_every_n_steps)
             return max(1, override)
@@ -26,7 +26,7 @@ def _get_persistent_workers(conf, num_workers):
     # persistent_workers only valid when num_workers > 0.
     if num_workers <= 0:
         return False
-    if hasattr(conf, "training") and hasattr(conf.training, "dataloader") and "persistent_workers" in conf.training.dataloader:
+    if hasattr(conf, "training") and hasattr(conf.training, "dataloader") and hasattr(conf.training.dataloader, "persistent_workers"):
         return bool(conf.training.dataloader.persistent_workers)
     return True
 
