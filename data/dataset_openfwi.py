@@ -96,6 +96,8 @@ def test1():
     for batch in dataloader:
         for key, value in batch.items():
             print(f"{key}: {value.shape}")
+            print(value.max(), value.min())
+
         print(f'数据集样本数：{dataset.__len__()}')
         break
 
