@@ -35,9 +35,9 @@ def test_ddpm_cond_diffusion(dataset_name):
 
 if __name__ == '__main__':
 
-    for dataset_name in ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']:
-        print(f'\n\n{dataset_name}\n')
-        test_ddpm_cond_diffusion(dataset_name)
+    # for dataset_name in ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']:
+    #     print(f'\n\n{dataset_name}\n')
+    #     test_ddpm_cond_diffusion(dataset_name)
 
     print('\n\nFaultVelA\n')
     test_ddpm_cond_diffusion_fault()
