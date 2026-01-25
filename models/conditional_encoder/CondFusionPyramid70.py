@@ -266,13 +266,12 @@ class CondS16ToZDecoder(nn.Module):
 
 # ====================== 自测（维度） ======================
 if __name__ == "__main__":
-    B = 2
-    z = torch.randn(B, 16, 16, 16)
-    x = torch.randn(B, 1, 70, 70)
-    y = torch.randn(B, 1, 1000, 70)
-
-    conds = {'rms_vel': y, 'migrate': y, 'horizens': x, 'well_log': x, }
-
+    conds= {
+        "rms_vel": torch.randn(2, 1, 1000, 70),
+        "migrated_image": torch.randn(2, 1, 1000, 70),
+        "horizon": torch.randn(2, 1, 70, 70),
+        "well_log": torch.randn(2, 1, 70, 70),
+    }
     model = CondFusionPyramid70()
     retur = model(conds)
     print("s16:", retur['s16'].shape)

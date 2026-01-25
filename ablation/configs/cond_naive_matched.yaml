@@ -1,0 +1,12 @@
+ablation:
+  cond_variant: "matched"
+  cond_encoder:
+    base_channels: 85
+    blocks_per_stage: [4, 4]
+    channel_multipliers: [1, 2]
+    bottleneck_expansion: 1
+    in_channels_by_key:
+      rms_vel: 1
+      migrated_image: 1
+      horizon: 1
+      well_log: 1
