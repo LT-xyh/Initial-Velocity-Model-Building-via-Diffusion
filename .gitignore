@@ -1,3 +1,5 @@
 logs/
 .idea/
 lib/
+.vscode/
+*/__pycache__/

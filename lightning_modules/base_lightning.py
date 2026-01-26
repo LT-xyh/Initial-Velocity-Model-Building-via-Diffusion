@@ -36,9 +36,16 @@ class BaseLightningModule(lightning.LightningModule):
         self._ema_parameters = None
  
     def _ema_params(self):
-        if self._ema_parameters is not None:
-            return self._ema_parameters
-        return list(self.parameters())
+        params = self._ema_parameters if self._ema_parameters is not None else list(self.parameters())
+        if self.ema is not None:
+            try:
+                param_device = next(p.device for p in params if p.requires_grad)
+            except StopIteration:
+                param_device = None
+            if param_device is not None and len(self.ema.shadow_params) > 0:
+                if self.ema.shadow_params[0].device != param_device:
+                    self.ema.to(param_device)
+        return params
  
     def setup(self, stage):
         if self.ema is not None:
@@ -47,6 +54,10 @@ class BaseLightningModule(lightning.LightningModule):
         self.train_metrics = ValMetrics(data_range=self.data_range, device=self.device)
         self.val_metrics = ValMetrics(data_range=self.data_range, device=self.device)
         self.test_metrics = ValMetrics(data_range=self.data_range, device=self.device)
+
+    def on_fit_start(self):
+        if self.ema is not None:
+            self.ema.to(self.device)
 
     def training_step(self, batch, batch_idx):
         return
@@ -111,8 +122,8 @@ class BaseLightningModule(lightning.LightningModule):
     def on_load_checkpoint(self, checkpoint):
         if "ema" not in checkpoint:
             return
-        from diffusers import EMAModel
-        self.ema = EMAModel(parameters=self._ema_params(), device="cpu")
+        if self.ema is None:
+            self.ema = EMAModel(parameters=self._ema_params())
         self.ema.load_state_dict(checkpoint["ema"])
 
     def on_test_start(self):

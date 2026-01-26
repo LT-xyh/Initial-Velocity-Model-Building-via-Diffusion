@@ -22,7 +22,7 @@ def train_cond_ablation_variants(override_path: Optional[str] = None) -> None:
     conf.training.logging.log_version = date_str + "ablation_naive_cond_variant"
 
     model = DDPMConditionalDiffusionLightningCondAblationVariants(conf)
-    base_train(model, conf, fast_run=True, use_lr_finder=False)
+    base_train(model, conf, fast_run=False, use_lr_finder=False)
 
 
 if __name__ == "__main__":

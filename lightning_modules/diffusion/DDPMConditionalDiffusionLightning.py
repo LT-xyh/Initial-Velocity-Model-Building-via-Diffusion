@@ -35,7 +35,7 @@ class DDPMConditionalDiffusionLightning(BaseLightningModule):
         if self.conf.training.use_ema:
             self._ema_parameters = [p for p in self.parameters() if p.requires_grad]
             self.ema = EMAModel(parameters=self._ema_parameters, use_ema_warmup=True, foreach=True, power=0.75,
-                                device="cpu")
+                                )
 
     def training_step(self, batch, batch_idx):
         # 1. 数据
