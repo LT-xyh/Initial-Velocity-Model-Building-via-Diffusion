@@ -1,6 +1,6 @@
 datasets:
   use_data: [ 'depth_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel' ] # ('depth_vel', 'time_vel', 'migrated_image', 'well_log', 'horizon', 'rms_vel')
-  dataset_name: [ 'CurveVelA', ]  #['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']
+  dataset_name:  ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']#[ 'CurveVelA', ]
   use_normalize: '-1_1'  # '01' '-1_1'
   depth_velocity:
     shape: [ 1, 70, 70 ]

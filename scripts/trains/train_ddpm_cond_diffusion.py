@@ -13,7 +13,7 @@ def train_ddpm_cond_diffusion():
     # 获取当前日期时间
     current_date = datetime.now()
     date_str = current_date.strftime("%y%m%d-%H")
-    conf.training.logging.log_version = date_str + "base_cond-CA_rms-smooth"
+    conf.training.logging.log_version = date_str + "base-cond_rms-smooth"
 
     model = DDPMConditionalDiffusionLightning(conf)
     base_train(model, conf, fast_run=False, use_lr_finder=False, )

@@ -1,6 +1,8 @@
+import time
 from datetime import datetime
 import argparse
 
+import psutil
 import torch
 from omegaconf import OmegaConf
 
@@ -35,4 +37,7 @@ def _parse_args():
 
 
 if __name__ == "__main__":
-    train_autoencoder_kl_latent_hw(32)  # 8 or 32
+    pid = 5276
+    while psutil.pid_exists(pid):
+        time.sleep(60)
+    train_autoencoder_kl_latent_hw(8)  # 8 or 32
