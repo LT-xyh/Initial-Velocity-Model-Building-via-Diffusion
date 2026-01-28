@@ -1,0 +1,2 @@
+ablation:
+  drop_modality: "rms_vel"

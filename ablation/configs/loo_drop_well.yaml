@@ -1,0 +1,2 @@
+ablation:
+  drop_modality: "well_log"

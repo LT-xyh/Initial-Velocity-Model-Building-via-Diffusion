@@ -1,0 +1,2 @@
+ablation:
+  drop_modality: "migrated_image"
