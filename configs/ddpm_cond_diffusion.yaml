@@ -11,7 +11,7 @@ autoencoder_conf:
 latent_diffusion:
   scheduler:
     scheduler_type: 'ddpm'
-    num_train_timesteps: 1000
+    num_train_timesteps: 200
   cond:
     model_mode: 'crossattn'
 
