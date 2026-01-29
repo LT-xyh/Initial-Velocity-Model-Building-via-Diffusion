@@ -41,7 +41,7 @@ def train_ddpm_cond_loo(override_path: str | None = None) -> None:
     conf.training.logging.log_version = f"{date_str}loo_{_resolve_drop_tag(conf)}"
 
     model = DDPMConditionalDiffusionLightningLOO(conf)
-    base_train(model, conf, fast_run=False, use_lr_finder=False)
+    base_train(model, conf, fast_run=True, use_lr_finder=False)
 
 
 if __name__ == "__main__":

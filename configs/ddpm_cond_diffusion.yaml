@@ -12,6 +12,8 @@ latent_diffusion:
   scheduler:
     scheduler_type: 'ddpm'
     num_train_timesteps: 200
+    num_val_timesteps: 10
+    num_test_timesteps: 50
   cond:
     model_mode: 'crossattn'
 
