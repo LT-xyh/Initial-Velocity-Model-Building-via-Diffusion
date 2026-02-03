@@ -3,14 +3,12 @@ from datetime import datetime
 import torch
 from omegaconf import OmegaConf
 
-from ablation.lightning.DDPMConditionalDiffusionLightning_LOO import (
-    DDPMConditionalDiffusionLightningLOO,
-)
+from ablation.lightning.DDPMConditionalDiffusionLightning_LOO import (DDPMConditionalDiffusionLightningLOO, )
 from scripts.trains.basetrain import base_train
 
 # Overrides to run in one sweep (exclude full).
 OVERRIDE_PATHS = (
-    "ablation/configs/loo_drop_rms.yaml",
+    #"ablation/configs/loo_drop_rms.yaml",
     "ablation/configs/loo_drop_pstm.yaml",
     "ablation/configs/loo_drop_hor.yaml",
     "ablation/configs/loo_drop_well.yaml",
@@ -41,9 +39,10 @@ def train_ddpm_cond_loo(override_path: str | None = None) -> None:
     conf.training.logging.log_version = f"{date_str}loo_{_resolve_drop_tag(conf)}"
 
     model = DDPMConditionalDiffusionLightningLOO(conf)
-    base_train(model, conf, fast_run=True, use_lr_finder=False)
+    base_train(model, conf, fast_run=False, use_lr_finder=False)
 
 
 if __name__ == "__main__":
     for override in OVERRIDE_PATHS:
+        print("\n\n" + override)
         train_ddpm_cond_loo(override)

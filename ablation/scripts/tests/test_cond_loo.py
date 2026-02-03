@@ -19,10 +19,10 @@ OVERRIDE_PATHS = (
 # Per-modality checkpoints for ablation runs.
 # Update these paths to the actual checkpoints produced by training.
 CKPT_PATHS = {
-    "rms_vel": "",
-    "migrated_image": "",
-    "horizon": "",
-    "well_log": "",
+    "rms_vel": "logs/ddpm_diffusion/tensorboard/260129-15loo_drop_rms_vel/checkpoints/epoch_49-loss0.713.ckpt",
+    "migrated_image": "logs/ddpm_diffusion/tensorboard/260130-20loo_drop_migrated_image/checkpoints/epoch_41-loss-0.008.ckpt",
+    "horizon": "logs/ddpm_diffusion/tensorboard/260131-14loo_drop_horizon/checkpoints/epoch_49-loss0.925.ckpt",
+    "well_log": "logs/ddpm_diffusion/tensorboard/260201-14loo_drop_well_log/checkpoints/epoch_56-loss0.913.ckpt",
 }
 
 
@@ -39,7 +39,7 @@ def _resolve_drop_tag(conf) -> str:
     return f"drop_{drop_str}"
 
 
-def test_ddpm_cond_loo(override_path: str | None = None) -> None:
+def test_ddpm_cond_loo(dataset_name, override_path: str | None = None) -> None:
     torch.set_float32_matmul_precision("medium")
     conf = OmegaConf.load("configs/ddpm_cond_diffusion.yaml")
     if override_path:
@@ -47,8 +47,9 @@ def test_ddpm_cond_loo(override_path: str | None = None) -> None:
         conf = OmegaConf.merge(conf, override)
     current_date = datetime.now()
     date_str = current_date.strftime("%y%m%d-%H")
-    conf.training.logging.log_version = f"{date_str}loo_{_resolve_drop_tag(conf)}"
-
+    conf.training.logging.log_version = f"test/{date_str}_loo_{_resolve_drop_tag(conf)}"
+    conf.datasets.dataset_name = [dataset_name, ]
+    conf.testing.test_save_dir = f'{conf.testing.test_save_dir}/test_{date_str}/{dataset_name}'
     drop_tag = _resolve_drop_tag(conf)
     if drop_tag.startswith("drop_"):
         drop_key = drop_tag.replace("drop_", "", 1)
@@ -68,4 +69,6 @@ def test_ddpm_cond_loo(override_path: str | None = None) -> None:
 
 if __name__ == "__main__":
     for override in OVERRIDE_PATHS:
-        test_ddpm_cond_loo(override)
+        for dataset_name in ['FlatVelA', 'FlatVelB', 'CurveVelA', 'CurveVelB']:
+            print(f'\n\n{override}\n{dataset_name}\n')
+            test_ddpm_cond_loo(dataset_name, override)

@@ -27,7 +27,7 @@ class DDPMConditionalDiffusionLightningLOO(DDPMConditionalDiffusionLightning):
         depth_velocity = cond_batch.pop("depth_vel")
 
         if self.drop_modality is not None and self.drop_modality in cond_batch:
-            del cond_batch[self.drop_modality]
+            cond_batch[self.drop_modality] = torch.zeros_like(cond_batch[self.drop_modality])
         ldm_cond_embedding = self.ldm_cond_encoder(cond_batch)["s16"]
         del cond_batch
 
@@ -59,11 +59,12 @@ class DDPMConditionalDiffusionLightningLOO(DDPMConditionalDiffusionLightning):
         depth_velocity = cond_batch.pop("depth_vel")
 
         if self.drop_modality is not None and self.drop_modality in cond_batch:
-            del cond_batch[self.drop_modality]
+            cond_batch[self.drop_modality] = torch.zeros_like(cond_batch[self.drop_modality])
         ldm_cond_embedding = self.ldm_cond_encoder(cond_batch)["s16"]
         del cond_batch
 
-        recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16))
+        recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16),
+                                  num_inference_steps=self.num_val_timesteps)
         with torch.no_grad():
             reconstructions = self.vae.decode(recon_z)
 
@@ -85,10 +86,11 @@ class DDPMConditionalDiffusionLightningLOO(DDPMConditionalDiffusionLightning):
         well_log = cond_batch.get("well_log", None)
 
         if self.drop_modality is not None and self.drop_modality in cond_batch:
-            del cond_batch[self.drop_modality]
+            cond_batch[self.drop_modality] = torch.zeros_like(cond_batch[self.drop_modality])
         ldm_cond_embedding = self.ldm_cond_encoder(cond_batch)["s16"]
 
-        recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16))
+        recon_z = self.ldm.sample(cond=ldm_cond_embedding, x_size=(depth_velocity.shape[0], 16, 16, 16),
+                                  num_inference_steps=self.num_test_timesteps)
         with torch.no_grad():
             reconstructions = self.vae.decode(recon_z)
 

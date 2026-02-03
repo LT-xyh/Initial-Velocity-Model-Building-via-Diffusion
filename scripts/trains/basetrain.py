@@ -40,10 +40,10 @@ def base_train(model, conf, fast_run=True, use_lr_finder=False, ckpt_path=None):
         total_size = len(dataset)
         # Reserve last 10% for potential test split (not used here).
         test_size = int(0.1 * total_size)  # 取最后10%作为测试集（非随机）
-        remaining_idx = list(range(total_size - test_size))  # 剩下的80%用于训练和验证
+        remaining_idx = list(range(total_size - test_size))  # 剩下的90%用于训练和验证
 
         # test_idx = list(range(test_size))
-        # remaining_idx = list(range(test_size, total_size))  # 剩下的80%用于训练和验证
+        # remaining_idx = list(range(test_size, total_size))  # 剩下的90%用于训练和验证
 
         # 从剩余数据中随机划分训练集和验证集
         train_idx, val_idx = train_test_split(remaining_idx, test_size=0.25,  # 相对于剩余数据的25%，即总数据的20%
